@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.vinext/
+*.tsbuildinfo
+.DS_Store
+*.local
+.next/
+next-env.d.ts
