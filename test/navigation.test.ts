@@ -115,3 +115,41 @@ test("does not open the Google Maps fallback after the native app takes over", (
   timer?.();
   expect(visited).toEqual([nativeUrl]);
 });
+
+test("opens navigation in a separate browsing context and preserves the YouBike page", () => {
+  expect(navigation).not.toBeNull();
+  if (!navigation) return;
+
+  const targets = navigation.buildStationNavigationTargets(station, "android");
+  const nativeUrl = targets.nativeUrl;
+  if (!nativeUrl) throw new Error("Expected an Android navigation URL");
+  const assignedUrls: string[] = [];
+  const openedContexts: Array<{ url: string; target: string }> = [];
+  const externalWindow = {
+    closed: false,
+    opener: {} as Window | null,
+    location: { assign: (url: string) => assignedUrls.push(url) },
+  } as unknown as Window;
+  const browserWindow = {
+    open: (url = "", target = "") => {
+      openedContexts.push({ url, target });
+      return externalWindow;
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    setTimeout,
+  } as unknown as Window;
+  const browserDocument = {
+    visibilityState: "visible",
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as Document;
+
+  const runtime = navigation.createBrowserNavigationRuntime(browserWindow, browserDocument);
+  runtime.navigate(nativeUrl);
+  runtime.navigate(targets.googleMapsUrl);
+
+  expect(openedContexts).toEqual([{ url: "", target: "_blank" }]);
+  expect(externalWindow.opener).toBeNull();
+  expect(assignedUrls).toEqual([nativeUrl, targets.googleMapsUrl]);
+});

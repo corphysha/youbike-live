@@ -77,24 +77,42 @@ export function launchStationNavigation(
   }, NATIVE_FALLBACK_DELAY_MS);
 }
 
-export function createBrowserNavigationRuntime(): NavigationRuntime {
+export function createBrowserNavigationRuntime(
+  browserWindow: Pick<
+    Window,
+    "open" | "addEventListener" | "removeEventListener" | "setTimeout"
+  > = window,
+  browserDocument: Pick<
+    Document,
+    "visibilityState" | "addEventListener" | "removeEventListener"
+  > = document,
+): NavigationRuntime {
+  let mapWindow: Window | null = null;
+
   return {
-    navigate: (url) => window.location.assign(url),
-    isHidden: () => document.visibilityState === "hidden",
+    navigate: (url) => {
+      if (!mapWindow || mapWindow.closed) {
+        mapWindow = browserWindow.open("", "_blank");
+        if (!mapWindow) return;
+        mapWindow.opener = null;
+      }
+      mapWindow.location.assign(url);
+    },
+    isHidden: () => browserDocument.visibilityState === "hidden",
     subscribeToDeparture: (onDeparture) => {
       const onVisibilityChange = () => {
-        if (document.visibilityState === "hidden") onDeparture();
+        if (browserDocument.visibilityState === "hidden") onDeparture();
       };
       const onPageHide = () => onDeparture();
 
-      document.addEventListener("visibilitychange", onVisibilityChange);
-      window.addEventListener("pagehide", onPageHide);
+      browserDocument.addEventListener("visibilitychange", onVisibilityChange);
+      browserWindow.addEventListener("pagehide", onPageHide);
       return () => {
-        document.removeEventListener("visibilitychange", onVisibilityChange);
-        window.removeEventListener("pagehide", onPageHide);
+        browserDocument.removeEventListener("visibilitychange", onVisibilityChange);
+        browserWindow.removeEventListener("pagehide", onPageHide);
       };
     },
-    schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
+    schedule: (callback, delayMs) => browserWindow.setTimeout(callback, delayMs),
   };
 }
 
