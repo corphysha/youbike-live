@@ -2,6 +2,8 @@
 
 台灣 YouBike 微笑單車即時站點查詢。查任何站點目前的可借車輛數、可停空位數、狀態與最後更新時間。
 
+地圖可瀏覽符合目前篩選條件的站點，點選標記會在地圖下方顯示站點資訊。按「定位我的位置」並授權後，地圖會移至目前位置，站點清單依直線距離由近到遠排列。定位座標只在瀏覽器端使用；顯示底圖時會向 OpenStreetMap 載入地圖圖磚。
+
 線上版：<https://corphysha.github.io/youbike-live/>
 
 ## 資料來源
@@ -18,6 +20,8 @@
 - vinext（Cloudflare 的 Next.js API on Vite）靜態匯出
 - Bun 1.3 + TypeScript strict + Biome 2.5 + Zod 4
 - React 19 + Phosphor Icons
+- Leaflet + MarkerCluster（OpenStreetMap 底圖）
+- 定位後依 Haversine 直線距離排序
 - 最愛站點儲存在瀏覽器 localStorage
 
 ## 開發
@@ -29,4 +33,6 @@ bun run build    # 生產建置 → dist/
 bun run preview  # 預覽建置結果
 bun run lint     # Biome 檢查
 bun run typecheck
+bun run test
+bun run audit:responsive
 ```

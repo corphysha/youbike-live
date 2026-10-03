@@ -149,6 +149,8 @@ try {
       };
       const header = document.querySelector(".masthead-inner");
       const card = document.querySelector(".station-card");
+      const map = document.querySelector(".map-canvas");
+      const locateButton = document.querySelector(".locate-btn");
       return {
         width: innerWidth,
         documentWidth: document.documentElement.scrollWidth,
@@ -165,6 +167,8 @@ try {
         themeToggle: rect(document.querySelector(".theme-toggle")),
         refreshButton: rect(document.querySelector(".refresh-btn")),
         firstChip: rect(document.querySelector(".chip")),
+        map: map ? rect(map) : null,
+        locateButton: locateButton ? rect(locateButton) : null,
         colorScheme: getComputedStyle(document.documentElement).colorScheme,
         background: getComputedStyle(document.body).backgroundColor,
       };
@@ -197,6 +201,16 @@ try {
       result.headerChildren.every((item) => item.left >= 0 && item.right <= result.width),
       `header content clipped at ${result.width}px: ${JSON.stringify(result.headerChildren)}`,
     );
+    assert.ok(
+      result.map && result.map.width > 0 && result.map.height >= 300,
+      `map is missing or too short at ${result.width}px: ${JSON.stringify(result.map)}`,
+    );
+    assert.ok(
+      result.locateButton &&
+        result.locateButton.left >= 0 &&
+        result.locateButton.right <= result.width,
+      `location button clipped at ${result.width}px: ${JSON.stringify(result.locateButton)}`,
+    );
     if (result.width <= 430 && result.card) {
       assert.ok(
         result.card.name.right <= result.card.box.right &&
@@ -223,6 +237,10 @@ try {
       assert.ok(
         result.refreshButton.height >= 44,
         `refresh target too small at ${result.width}px: ${JSON.stringify(result.refreshButton)}`,
+      );
+      assert.ok(
+        result.locateButton.width >= 44 && result.locateButton.height >= 44,
+        `location target too small at ${result.width}px: ${JSON.stringify(result.locateButton)}`,
       );
     }
     assert.ok(result.themeToggle.width > 0, "theme toggle is missing");
@@ -322,6 +340,85 @@ try {
     await evaluate("getComputedStyle(document.documentElement).colorScheme"),
     "dark",
     "system dark mode was not followed",
+  );
+  await cdp("Browser.grantPermissions", {
+    origin: new URL(targetUrl).origin,
+    permissions: ["geolocation"],
+  });
+  await cdp("Emulation.setGeolocationOverride", {
+    latitude: 25.0478,
+    longitude: 121.5319,
+    accuracy: 20,
+  });
+  await cdp("Runtime.evaluate", {
+    expression: 'document.querySelector(".locate-btn").click()',
+  });
+  let locationResult;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    locationResult = await evaluate(`(() => ({
+      message: document.querySelector(".location-message")?.textContent ?? "",
+      distances: [...document.querySelectorAll(".station-distance")].slice(0, 8).map((item) => Number(item.dataset.distanceMeters)),
+      userMarker: document.querySelector(".user-location-dot") !== null
+    }))()`);
+    if (locationResult.userMarker && locationResult.distances.length >= 2) break;
+    await delay(200);
+  }
+  assert.ok(locationResult.message.includes("本站不會接收"), "location request did not succeed");
+  assert.ok(locationResult.userMarker, "user location marker is missing from the map");
+  assert.ok(
+    locationResult.distances.length >= 2 &&
+      locationResult.distances.every(
+        (distance, index, distances) => index === 0 || distances[index - 1] <= distance,
+      ),
+    `station list is not sorted by distance: ${JSON.stringify(locationResult.distances)}`,
+  );
+
+  let markerTitle = await evaluate(
+    'document.querySelector(".station-pin-icon[title]")?.getAttribute("title") ?? null',
+  );
+  for (let attempt = 0; attempt < 100 && !markerTitle; attempt += 1) {
+    await delay(100);
+    markerTitle = await evaluate(
+      'document.querySelector(".station-pin-icon[title]")?.getAttribute("title") ?? null',
+    );
+    if (await evaluate('document.querySelectorAll(".station-cluster-icon").length > 0')) break;
+  }
+  for (let attempt = 0; attempt < 6 && !markerTitle; attempt += 1) {
+    await cdp("Runtime.evaluate", {
+      expression: 'document.querySelector(".leaflet-control-zoom-in")?.click()',
+    });
+    await delay(250);
+    markerTitle = await evaluate(
+      'document.querySelector(".station-pin-icon[title]")?.getAttribute("title") ?? null',
+    );
+  }
+  if (!markerTitle) {
+    console.log(
+      "Map marker inventory:",
+      JSON.stringify(
+        await evaluate(`(() => ({
+          markerIcons: document.querySelectorAll(".leaflet-marker-icon").length,
+          stationPins: document.querySelectorAll(".station-pin-icon").length,
+          stationClusters: document.querySelectorAll(".station-cluster-icon").length,
+          mapLoading: document.querySelector(".map-loading")?.textContent ?? null,
+          zoomInTitle: document.querySelector(".leaflet-control-zoom-in")?.title ?? null,
+          userMarker: document.querySelector(".user-location-dot") !== null
+        }))()`),
+      ),
+    );
+  }
+  assert.ok(markerTitle, "no station marker became selectable after zooming in");
+  await cdp("Runtime.evaluate", {
+    expression: 'document.querySelector(".station-pin-icon[title]")?.click()',
+  });
+  await delay(100);
+  const selected = await evaluate(`({
+    name: document.querySelector(".selected-station h3")?.textContent ?? "",
+    markerTitle: document.querySelector(".station-pin.is-selected")?.parentElement?.getAttribute("title") ?? ""
+  })`);
+  assert.ok(
+    selected.name && selected.markerTitle.startsWith(selected.name),
+    "map marker did not populate selected station details",
   );
   console.log("Responsive and theme audit passed.");
 } finally {

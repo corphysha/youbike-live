@@ -1,6 +1,7 @@
 import {
   ArrowsClockwise,
   Bicycle,
+  Crosshair,
   MagnifyingGlass,
   Moon,
   Star,
@@ -10,9 +11,13 @@ import {
 } from "@phosphor-icons/react";
 import Head from "next/head";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
 import "../styles/globals.css";
 import { StationCard } from "../components/StationCard";
+import { StationMap } from "../components/StationMap";
 import { FeedError, fetchAreas, fetchStations } from "../lib/api";
+import { formatDistance, type GeoPoint, getDistanceMeters } from "../lib/distance";
 import { clearFavorites, loadFavorites, toggleFavorite } from "../lib/favorites";
 import type { Area, StationView } from "../lib/schema";
 
@@ -22,6 +27,7 @@ const THEME_STORAGE_KEY = "youbike-theme";
 
 type ThemePreference = "system" | "light" | "dark";
 type LoadState = "loading" | "ready" | "error";
+type LocationStatus = "idle" | "loading" | "ready" | "error";
 
 function updateBrowserThemeColor(isDark: boolean) {
   document
@@ -130,6 +136,10 @@ export default function Home() {
   const [areaCode, setAreaCode] = useState<string | null>(null);
   const [favOnly, setFavOnly] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
+  const [locationMessage, setLocationMessage] = useState("");
+  const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
   const inFlight = useRef(false);
 
@@ -199,7 +209,7 @@ export default function Home() {
     // 台/臺 usage varies across station names — match either form
     const q2 = q.replace(/台/g, "臺");
     const norm = (t: string) => t.toLowerCase().replace(/台/g, "臺");
-    return stations.filter((s) => {
+    const matches = stations.filter((s) => {
       if (favOnly && !favSet.has(s.id)) return false;
       if (areaCode && s.areaCode !== areaCode) return false;
       if (!q2) return true;
@@ -211,7 +221,13 @@ export default function Home() {
         s.id.includes(q2)
       );
     });
-  }, [stations, favorites, favOnly, areaCode, q]);
+    if (!userLocation) return matches;
+
+    return matches
+      .map((station) => ({ station, distance: getDistanceMeters(userLocation, station) }))
+      .sort((a, b) => a.distance - b.distance)
+      .map(({ station }) => station);
+  }, [stations, favorites, favOnly, areaCode, q, userLocation]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset pagination when any filter changes
   useEffect(() => {
@@ -219,6 +235,9 @@ export default function Home() {
   }, [query, areaCode, favOnly]);
 
   const shown = filtered.slice(0, visible);
+  const selectedStation = filtered.find((station) => station.id === selectedStationId) ?? null;
+  const selectedDistance =
+    selectedStation && userLocation ? getDistanceMeters(userLocation, selectedStation) : null;
   const areaName = (code: string) => areaByCode.get(code)?.area_name_tw ?? code;
 
   const onToggleFav = useCallback((id: string) => {
@@ -229,6 +248,45 @@ export default function Home() {
     setFavorites(clearFavorites());
     setFavOnly(false);
   }, []);
+
+  const requestLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationStatus("error");
+      setLocationMessage("此瀏覽器不支援定位；仍可用縣市篩選與搜尋站點。");
+      return;
+    }
+
+    setLocationStatus("loading");
+    setLocationMessage("正在取得定位…");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        setUserLocation(nextLocation);
+        setLocationStatus("ready");
+        setLocationMessage(
+          "已依直線距離由近到遠排序。座標留在本機；本站不會接收，底圖由 OpenStreetMap 提供。",
+        );
+      },
+      (error) => {
+        const message =
+          error.code === error.PERMISSION_DENIED
+            ? "尚未取得定位權限；可在瀏覽器設定允許定位，或繼續搜尋站點。"
+            : error.code === error.POSITION_UNAVAILABLE
+              ? "目前無法判定位置；請稍後再試，或繼續搜尋站點。"
+              : "定位逾時；請確認裝置定位已開啟後再試。";
+        setLocationStatus("error");
+        setLocationMessage(message);
+      },
+      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 12_000 },
+    );
+  }, []);
+
+  useEffect(() => {
+    if (selectedStationId && !selectedStation) setSelectedStationId(null);
+  }, [selectedStationId, selectedStation]);
 
   const totalAvailable = useMemo(
     () => filtered.reduce((sum, s) => sum + (s.status === 1 ? s.available : 0), 0),
@@ -250,6 +308,9 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </Head>
 
+      <a className="skip-link" href="#main-content">
+        跳至站點內容
+      </a>
       <header className="masthead">
         <div className="masthead-inner">
           <div className="brand">
@@ -289,7 +350,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="shell">
+      <main className="shell" id="main-content">
         <div className="controls">
           <div className="search-row">
             <span className="search-icon" aria-hidden="true">
@@ -299,6 +360,8 @@ export default function Home() {
               type="search"
               className="search-input"
               placeholder="搜尋站名、地址或行政區…"
+              name="station-search"
+              autoComplete="off"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               aria-label="搜尋站點"
@@ -399,6 +462,99 @@ export default function Home() {
 
         {state === "ready" && (
           <>
+            <section className="map-section" aria-labelledby="map-title">
+              <div className="map-heading">
+                <div className="map-heading-copy">
+                  <h2 id="map-title">站點地圖</h2>
+                  <p>
+                    {userLocation
+                      ? "地圖顯示目前篩選的站點，清單已按距離排序。"
+                      : "定位並授權後，地圖移至你的位置，清單依直線距離排序。"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="locate-btn"
+                  onClick={requestLocation}
+                  disabled={locationStatus === "loading"}
+                  aria-label={userLocation ? "重新取得位置並移動地圖" : "取得定位並移動地圖"}
+                >
+                  <Crosshair size={17} weight="bold" aria-hidden="true" />
+                  <span>
+                    {locationStatus === "loading"
+                      ? "定位中…"
+                      : userLocation
+                        ? "重新定位"
+                        : "定位我的位置"}
+                  </span>
+                </button>
+              </div>
+              {locationMessage && (
+                <p
+                  className={`location-message ${locationStatus}`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  {locationMessage}
+                </p>
+              )}
+              <StationMap
+                stations={filtered}
+                selectedId={selectedStationId}
+                userLocation={userLocation}
+                onSelectStation={(station) => setSelectedStationId(station.id)}
+              />
+              {selectedStation && (
+                <section className="selected-station" aria-live="polite" aria-label="地圖所選站點">
+                  <div className="selected-station-heading">
+                    <div className="selected-station-copy">
+                      <span className="selected-label">地圖所選站點</span>
+                      <h3>{selectedStation.name}</h3>
+                      <p>
+                        {selectedStation.district}
+                        {selectedStation.district && " · "}
+                        {selectedStation.address}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="fav-btn selected-fav"
+                      aria-pressed={favorites.includes(selectedStation.id)}
+                      aria-label={
+                        favorites.includes(selectedStation.id)
+                          ? `取消最愛：${selectedStation.name}`
+                          : `加入最愛：${selectedStation.name}`
+                      }
+                      onClick={() => onToggleFav(selectedStation.id)}
+                    >
+                      <Star
+                        size={19}
+                        weight={favorites.includes(selectedStation.id) ? "fill" : "regular"}
+                      />
+                    </button>
+                  </div>
+                  <div className="selected-metrics">
+                    <div>
+                      <span>可借車輛</span>
+                      <strong className="available">
+                        {selectedStation.status === 1 ? selectedStation.available : "—"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>剩餘空位</span>
+                      <strong>{selectedStation.status === 1 ? selectedStation.empty : "—"}</strong>
+                    </div>
+                    {selectedDistance !== null && (
+                      <div>
+                        <span>直線距離</span>
+                        <strong>{formatDistance(selectedDistance)}</strong>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+            </section>
+
             <div className="summary-line" aria-live="polite">
               <span>{filtered.length.toLocaleString()} 個站點</span>
               <span>可借 {totalAvailable.toLocaleString()} 輛</span>
@@ -420,6 +576,7 @@ export default function Home() {
                     station={s}
                     isFav={favorites.includes(s.id)}
                     now={now}
+                    distanceMeters={userLocation ? getDistanceMeters(userLocation, s) : undefined}
                     onToggleFav={onToggleFav}
                   />
                 ))}

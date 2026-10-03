@@ -1,4 +1,5 @@
 import { Lightning, Star } from "@phosphor-icons/react";
+import { formatDistance } from "../lib/distance";
 import { ageMinutes, availabilityLevel, LEVEL_LABEL, shortTime } from "../lib/format";
 import type { StationView } from "../lib/schema";
 
@@ -6,10 +7,11 @@ interface Props {
   station: StationView;
   isFav: boolean;
   now: Date;
+  distanceMeters?: number;
   onToggleFav: (id: string) => void;
 }
 
-export function StationCard({ station, isFav, now, onToggleFav }: Props) {
+export function StationCard({ station, isFav, now, distanceMeters, onToggleFav }: Props) {
   const level = availabilityLevel(station.available, station.empty, station.status);
   const age = ageMinutes(station.updatedAt, now);
   const detail = station.detail;
@@ -73,6 +75,11 @@ export function StationCard({ station, isFav, now, onToggleFav }: Props) {
         </span>
         <span className="muted">更新 {shortTime(station.updatedAt, now)}</span>
         {age !== null && age >= 20 && <span className="muted">（{age} 分鐘前）</span>}
+        {distanceMeters !== undefined && (
+          <span className="station-distance" data-distance-meters={distanceMeters}>
+            直線 {formatDistance(distanceMeters)}
+          </span>
+        )}
       </div>
     </li>
   );
