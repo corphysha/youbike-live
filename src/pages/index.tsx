@@ -622,6 +622,7 @@ export default function Home() {
                     now={now}
                     distanceMeters={userLocation ? getDistanceMeters(userLocation, s) : undefined}
                     onToggleFav={onToggleFav}
+                    onNavigateToStation={navigateToStation}
                   />
                 ))}
               </ul>

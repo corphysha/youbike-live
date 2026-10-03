@@ -172,6 +172,7 @@ try {
           address: rect(card.querySelector(".station-name-en")),
           numbers: rect(card.querySelector(".station-nums")),
           favorite: rect(card.querySelector(".fav-btn")),
+          navigation: rect(card.querySelector(".station-nav-button")),
         } : null,
         themeToggle: rect(document.querySelector(".theme-toggle")),
         refreshButton: rect(document.querySelector(".refresh-btn")),
@@ -234,6 +235,10 @@ try {
       assert.ok(
         result.card.favorite.width >= 44 && result.card.favorite.height >= 44,
         `favorite target too small at ${result.width}px: ${JSON.stringify(result.card.favorite)}`,
+      );
+      assert.ok(
+        result.card.navigation.width >= 44 && result.card.navigation.height >= 44,
+        `station navigation target too small at ${result.width}px: ${JSON.stringify(result.card.navigation)}`,
       );
       assert.ok(
         result.firstChip.height >= 44,

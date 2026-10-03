@@ -1,4 +1,4 @@
-import { Lightning, Star } from "@phosphor-icons/react";
+import { Lightning, NavigationArrow, Star } from "@phosphor-icons/react";
 import { formatDistance } from "../lib/distance";
 import { ageMinutes, availabilityLevel, LEVEL_LABEL, shortTime } from "../lib/format";
 import type { StationView } from "../lib/schema";
@@ -9,9 +9,17 @@ interface Props {
   now: Date;
   distanceMeters?: number;
   onToggleFav: (id: string) => void;
+  onNavigateToStation: (station: StationView) => void;
 }
 
-export function StationCard({ station, isFav, now, distanceMeters, onToggleFav }: Props) {
+export function StationCard({
+  station,
+  isFav,
+  now,
+  distanceMeters,
+  onToggleFav,
+  onNavigateToStation,
+}: Props) {
   const level = availabilityLevel(station.available, station.empty, station.status);
   const age = ageMinutes(station.updatedAt, now);
   const detail = station.detail;
@@ -34,6 +42,16 @@ export function StationCard({ station, isFav, now, distanceMeters, onToggleFav }
             <Lightning size={14} weight="fill" />
           </span>
         )}
+        <button
+          type="button"
+          className="station-nav-button"
+          aria-label={`開啟前往 ${station.name} 的步行導航`}
+          title="開啟導航"
+          onClick={() => onNavigateToStation(station)}
+        >
+          <NavigationArrow size={16} weight="bold" aria-hidden="true" />
+          <span>導航</span>
+        </button>
       </div>
       <div className="station-name-en">
         {station.district}
