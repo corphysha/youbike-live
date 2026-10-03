@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build && bun scripts/package-pages.mjs",
+    "audit:responsive": "bun scripts/responsive-audit.mjs",
     "preview": "vinext preview",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 const clientDir = join(import.meta.dir, "..", "dist", "client");
 const siteDir = join(import.meta.dir, "..", "dist", "pages-site");
+const publicDir = join(import.meta.dir, "..", "public");
 
 const pageFile = join(clientDir, "youbike-live.html");
 const assetsDir = join(clientDir, "youbike-live");
@@ -23,6 +24,7 @@ if (!existsSync(pageFile) || !existsSync(assetsDir)) {
 rmSync(siteDir, { recursive: true, force: true });
 mkdirSync(siteDir, { recursive: true });
 cpSync(assetsDir, siteDir, { recursive: true });
+if (existsSync(publicDir)) cpSync(publicDir, siteDir, { recursive: true });
 copyFileSync(pageFile, join(siteDir, "index.html"));
 
 // .nojekyll: skip Jekyll so files starting with _ are served.

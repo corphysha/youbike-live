@@ -2,7 +2,9 @@ import {
   ArrowsClockwise,
   Bicycle,
   MagnifyingGlass,
+  Moon,
   Star,
+  Sun,
   WifiSlash,
   X,
 } from "@phosphor-icons/react";
@@ -16,8 +18,105 @@ import type { Area, StationView } from "../lib/schema";
 
 const PAGE_SIZE = 40;
 const REFRESH_MS = 60_000;
+const THEME_STORAGE_KEY = "youbike-theme";
 
+type ThemePreference = "system" | "light" | "dark";
 type LoadState = "loading" | "ready" | "error";
+
+function updateBrowserThemeColor(isDark: boolean) {
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", isDark ? "#131612" : "#f7f6f2");
+}
+
+function ThemeToggle() {
+  const [preference, setPreference] = useState<ThemePreference>("system");
+  const [systemDark, setSystemDark] = useState(false);
+  const preferenceRef = useRef<ThemePreference>("system");
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const updateSystemTheme = () => {
+      setSystemDark(media.matches);
+      if (preferenceRef.current === "system") updateBrowserThemeColor(media.matches);
+    };
+
+    updateSystemTheme();
+    media.addEventListener("change", updateSystemTheme);
+
+    try {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (stored === "light" || stored === "dark") {
+        preferenceRef.current = stored;
+        setPreference(stored);
+        document.documentElement.dataset.theme = stored;
+        updateBrowserThemeColor(stored === "dark");
+      } else {
+        document.documentElement.removeAttribute("data-theme");
+      }
+    } catch {
+      document.documentElement.removeAttribute("data-theme");
+    }
+
+    return () => media.removeEventListener("change", updateSystemTheme);
+  }, []);
+
+  const isDark = preference === "system" ? systemDark : preference === "dark";
+  const label =
+    preference === "system"
+      ? `跟隨裝置外觀（目前${isDark ? "深色" : "淺色"}），點擊切換至${isDark ? "淺色" : "深色"}模式`
+      : preference === "light"
+        ? "淺色模式，點擊切換至深色模式"
+        : "深色模式，點擊恢復跟隨裝置外觀";
+
+  const cycleTheme = () => {
+    const next: ThemePreference =
+      preference === "system"
+        ? systemDark
+          ? "light"
+          : "dark"
+        : preference === "light"
+          ? "dark"
+          : "system";
+
+    preferenceRef.current = next;
+    setPreference(next);
+
+    if (next === "system") {
+      document.documentElement.removeAttribute("data-theme");
+      try {
+        window.localStorage.removeItem(THEME_STORAGE_KEY);
+      } catch {
+        // The system preference still applies for this session if storage is unavailable.
+      }
+      updateBrowserThemeColor(systemDark);
+      return;
+    }
+
+    document.documentElement.dataset.theme = next;
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch {
+      // The selected theme still applies for this session if storage is unavailable.
+    }
+    updateBrowserThemeColor(next === "dark");
+  };
+
+  return (
+    <button
+      type="button"
+      className="theme-toggle"
+      aria-label={label}
+      title={label}
+      onClick={cycleTheme}
+    >
+      {isDark ? <Moon size={17} weight="fill" /> : <Sun size={17} weight="fill" />}
+      <span className="theme-mode">
+        {preference === "system" ? "自動" : isDark ? "深色" : "淺色"}
+      </span>
+    </button>
+  );
+}
 
 export default function Home() {
   const [state, setState] = useState<LoadState>("loading");
@@ -148,7 +247,7 @@ export default function Home() {
           name="description"
           content="全台 YouBike 站點即時可借車輛數與可停空位數查詢，支援站名搜尋與最愛站點。"
         />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </Head>
 
       <header className="masthead">
@@ -157,7 +256,7 @@ export default function Home() {
             <span className="brand-mark" aria-hidden="true">
               <Bicycle size={19} weight="bold" color="#231f20" />
             </span>
-            YouBike 即時查詢
+            <span className="brand-name">YouBike 即時查詢</span>
             <span className="brand-sub">全台 {stations.length.toLocaleString()} 站</span>
           </div>
           <div className="header-spacer" />
@@ -167,15 +266,26 @@ export default function Home() {
               {`${String(lastFetch.getHours()).padStart(2, "0")}:${String(lastFetch.getMinutes()).padStart(2, "0")}`}
             </span>
           )}
-          <button
-            type="button"
-            className="refresh-btn"
-            onClick={() => void load()}
-            disabled={state === "loading"}
-          >
-            <ArrowsClockwise size={14} className={state === "loading" ? "spin" : undefined} />
-            重新整理
-          </button>
+          <div className="header-actions">
+            <ThemeToggle />
+            <button
+              type="button"
+              className="refresh-btn"
+              onClick={() => void load()}
+              disabled={state === "loading"}
+              aria-label="重新整理站點資料"
+            >
+              <ArrowsClockwise
+                size={14}
+                className={state === "loading" ? "spin" : undefined}
+                aria-hidden="true"
+              />
+              <span className="refresh-label-full">重新整理</span>
+              <span className="refresh-label-compact" aria-hidden="true">
+                更新
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 
