@@ -958,6 +958,34 @@ a {
   color: var(--good);
 }
 
+.selected-nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
+}
+
+.selected-nav-button:hover {
+  background: color-mix(in srgb, var(--accent) 88%, #ffffff);
+}
+
+.selected-nav-button:active {
+  transform: translateY(1px);
+}
+
 .station-distance {
   color: var(--ink-2);
   font-weight: 550;

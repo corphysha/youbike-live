@@ -4,6 +4,7 @@ import {
   Crosshair,
   MagnifyingGlass,
   Moon,
+  NavigationArrow,
   Star,
   Sun,
   WifiSlash,
@@ -20,6 +21,7 @@ import { FeedError, fetchAreas, fetchStations } from "../lib/api";
 import { formatDistance, type GeoPoint, getDistanceMeters } from "../lib/distance";
 import { clearFavorites, loadFavorites, toggleFavorite } from "../lib/favorites";
 import { readLocationPermission, shouldRequestLocationAutomatically } from "../lib/location";
+import { navigateToStation } from "../lib/navigation";
 import type { Area, StationView } from "../lib/schema";
 
 const PAGE_SIZE = 40;
@@ -583,6 +585,16 @@ export default function Home() {
                       </div>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    className="selected-nav-button"
+                    aria-label={`開啟前往 ${selectedStation.name} 的步行導航`}
+                    title="Android 交由系統選擇地圖 App；iPhone/iPad 開啟 Apple 地圖；無法開啟時改用 Google 地圖"
+                    onClick={() => navigateToStation(selectedStation)}
+                  >
+                    <NavigationArrow size={18} weight="bold" aria-hidden="true" />
+                    <span>步行前往</span>
+                  </button>
                 </section>
               )}
             </section>
