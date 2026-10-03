@@ -126,6 +126,15 @@ try {
   await cdp("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-color-scheme", value: "dark" }],
   });
+  await cdp("Browser.grantPermissions", {
+    origin: new URL(targetUrl).origin,
+    permissions: ["geolocation"],
+  });
+  await cdp("Emulation.setGeolocationOverride", {
+    latitude: 25.0478,
+    longitude: 121.5319,
+    accuracy: 20,
+  });
   await cdp("Page.navigate", { url: targetUrl });
   for (let attempt = 0; attempt < 120; attempt += 1) {
     if (await evaluate('document.querySelector(".station-card") !== null')) break;
@@ -341,18 +350,6 @@ try {
     "dark",
     "system dark mode was not followed",
   );
-  await cdp("Browser.grantPermissions", {
-    origin: new URL(targetUrl).origin,
-    permissions: ["geolocation"],
-  });
-  await cdp("Emulation.setGeolocationOverride", {
-    latitude: 25.0478,
-    longitude: 121.5319,
-    accuracy: 20,
-  });
-  await cdp("Runtime.evaluate", {
-    expression: 'document.querySelector(".locate-btn").click()',
-  });
   let locationResult;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     locationResult = await evaluate(`(() => ({

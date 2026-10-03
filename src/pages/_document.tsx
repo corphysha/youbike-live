@@ -6,6 +6,12 @@ export default function Document() {
       <Head>
         <link rel="preconnect" href="https://apis.youbike.com.tw" crossOrigin="" />
         <meta name="theme-color" content="#f7f6f2" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="YouBike 即時" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <link rel="manifest" href="/youbike-live/manifest.webmanifest" />
+        <link rel="apple-touch-icon" href="/youbike-live/icons/apple-touch-icon.png" />
         <script src="/youbike-live/theme-init.js" />
         <link
           rel="icon"

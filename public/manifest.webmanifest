@@ -1,0 +1,28 @@
+{
+  "id": "/youbike-live/",
+  "name": "YouBike 即時查詢",
+  "short_name": "YouBike 即時",
+  "description": "查詢全台 YouBike 即時站點、可借車輛與空位，並依距離尋找附近站點。",
+  "start_url": "/youbike-live/",
+  "scope": "/youbike-live/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#f7f6f2",
+  "background_color": "#f7f6f2",
+  "lang": "zh-Hant-TW",
+  "categories": ["navigation", "travel"],
+  "icons": [
+    {
+      "src": "/youbike-live/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/youbike-live/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

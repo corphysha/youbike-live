@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="YouBike 品牌圖示">
+  <title>YouBike 品牌圖示</title>
+  <rect width="512" height="512" rx="112" fill="#ffd400" />
+  <g fill="none" stroke="#231f20" stroke-linecap="round" stroke-linejoin="round" stroke-width="20">
+    <circle cx="168" cy="340" r="57" />
+    <circle cx="344" cy="340" r="57" />
+    <path d="m168 340 58-118 50 118H168l78-118h77l21 118" />
+    <path d="m226 222 18-27h35m44 27 16-25h23m-87 13 24 12" />
+  </g>
+</svg>

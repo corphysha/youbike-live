@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7f6f2" />
+    <title>目前離線 — YouBike 即時查詢</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif;
+        background: #f7f6f2;
+        color: #232323;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          background: #131612;
+          color: #f3f4ed;
+        }
+      }
+
+      body {
+        box-sizing: border-box;
+        min-height: 100dvh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      main {
+        width: min(100%, 420px);
+        border-top: 4px solid #ffd400;
+        padding: 28px 0;
+      }
+
+      .mark {
+        display: grid;
+        width: 46px;
+        height: 46px;
+        place-items: center;
+        border-radius: 14px;
+        background: #ffd400;
+        color: #231f20;
+        font-size: 22px;
+        font-weight: 800;
+      }
+
+      h1 {
+        margin: 24px 0 8px;
+        font-size: clamp(1.6rem, 6vw, 2.1rem);
+        line-height: 1.2;
+      }
+
+      p {
+        color: #78776f;
+        line-height: 1.7;
+      }
+
+      a {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        margin-top: 12px;
+        border-radius: 999px;
+        background: #ffd400;
+        padding: 0 18px;
+        color: #231f20;
+        font-weight: 700;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">Y</div>
+      <h1>目前沒有網路連線</h1>
+      <p>已安裝的 YouBike 介面可以開啟，但站點即時車輛與空位資料需要網路才能更新。</p>
+      <a href="./">重新連線</a>
+    </main>
+  </body>
+</html>
