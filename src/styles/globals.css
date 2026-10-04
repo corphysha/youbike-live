@@ -863,6 +863,14 @@ a {
   font-size: 12px;
 }
 
+.map-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .locate-btn {
   min-height: 44px;
   flex: none;

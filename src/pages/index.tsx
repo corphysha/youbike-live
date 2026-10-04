@@ -1,6 +1,8 @@
 import {
   ArrowsClockwise,
   Bicycle,
+  CaretDown,
+  CaretUp,
   Crosshair,
   MagnifyingGlass,
   Moon,
@@ -27,6 +29,7 @@ import type { Area, StationView } from "../lib/schema";
 const PAGE_SIZE = 40;
 const REFRESH_MS = 60_000;
 const THEME_STORAGE_KEY = "youbike-theme";
+const MAP_STORAGE_KEY = "youbike-map-collapsed";
 
 type ThemePreference = "system" | "light" | "dark";
 type LoadState = "loading" | "ready" | "error";
@@ -144,6 +147,7 @@ export default function Home() {
   const [locationMessage, setLocationMessage] = useState("");
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const [mapCollapsed, setMapCollapsed] = useState(false);
   const inFlight = useRef(false);
 
   const load = useCallback(async () => {
@@ -166,8 +170,25 @@ export default function Home() {
 
   useEffect(() => {
     setFavorites(loadFavorites());
+    try {
+      setMapCollapsed(window.localStorage.getItem(MAP_STORAGE_KEY) === "1");
+    } catch {
+      // storage blocked — map stays expanded
+    }
     void load();
   }, [load]);
+
+  const toggleMap = useCallback(() => {
+    setMapCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(MAP_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // choice still applies for this session
+      }
+      return next;
+    });
+  }, []);
 
   // refresh while visible
   useEffect(() => {
@@ -506,22 +527,38 @@ export default function Home() {
                       : "允許定位後會移至附近站點；下次開啟自動更新位置與距離排序。"}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="locate-btn"
-                  onClick={requestLocation}
-                  disabled={locationStatus === "loading"}
-                  aria-label={userLocation ? "重新取得位置並移動地圖" : "取得定位並移動地圖"}
-                >
-                  <Crosshair size={17} weight="bold" aria-hidden="true" />
-                  <span>
-                    {locationStatus === "loading"
-                      ? "定位中…"
-                      : userLocation
-                        ? "重新定位"
-                        : "定位我的位置"}
-                  </span>
-                </button>
+                <div className="map-actions">
+                  <button
+                    type="button"
+                    className="locate-btn"
+                    onClick={requestLocation}
+                    disabled={locationStatus === "loading"}
+                    aria-label={userLocation ? "重新取得位置並移動地圖" : "取得定位並移動地圖"}
+                  >
+                    <Crosshair size={17} weight="bold" aria-hidden="true" />
+                    <span>
+                      {locationStatus === "loading"
+                        ? "定位中…"
+                        : userLocation
+                          ? "重新定位"
+                          : "定位我的位置"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="locate-btn map-toggle"
+                    onClick={toggleMap}
+                    aria-expanded={!mapCollapsed}
+                    aria-controls="map-body"
+                  >
+                    {mapCollapsed ? (
+                      <CaretDown size={17} weight="bold" aria-hidden="true" />
+                    ) : (
+                      <CaretUp size={17} weight="bold" aria-hidden="true" />
+                    )}
+                    <span>{mapCollapsed ? "展開地圖" : "收起地圖"}</span>
+                  </button>
+                </div>
               </div>
               {locationMessage && (
                 <p
@@ -532,70 +569,80 @@ export default function Home() {
                   {locationMessage}
                 </p>
               )}
-              <StationMap
-                stations={filtered}
-                selectedId={selectedStationId}
-                userLocation={userLocation}
-                onSelectStation={(station) => setSelectedStationId(station.id)}
-              />
-              {selectedStation && (
-                <section className="selected-station" aria-live="polite" aria-label="地圖所選站點">
-                  <div className="selected-station-heading">
-                    <div className="selected-station-copy">
-                      <span className="selected-label">地圖所選站點</span>
-                      <h3>{selectedStation.name}</h3>
-                      <p>
-                        {selectedStation.district}
-                        {selectedStation.district && " · "}
-                        {selectedStation.address}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="fav-btn selected-fav"
-                      aria-pressed={favorites.includes(selectedStation.id)}
-                      aria-label={
-                        favorites.includes(selectedStation.id)
-                          ? `取消最愛：${selectedStation.name}`
-                          : `加入最愛：${selectedStation.name}`
-                      }
-                      onClick={() => onToggleFav(selectedStation.id)}
+              {!mapCollapsed && (
+                <div id="map-body">
+                  <StationMap
+                    stations={filtered}
+                    selectedId={selectedStationId}
+                    userLocation={userLocation}
+                    onSelectStation={(station) => setSelectedStationId(station.id)}
+                  />
+                  {selectedStation && (
+                    <section
+                      className="selected-station"
+                      aria-live="polite"
+                      aria-label="地圖所選站點"
                     >
-                      <Star
-                        size={19}
-                        weight={favorites.includes(selectedStation.id) ? "fill" : "regular"}
-                      />
-                    </button>
-                  </div>
-                  <div className="selected-metrics">
-                    <div>
-                      <span>可借車輛</span>
-                      <strong className="available">
-                        {selectedStation.status === 1 ? selectedStation.available : "—"}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>剩餘空位</span>
-                      <strong>{selectedStation.status === 1 ? selectedStation.empty : "—"}</strong>
-                    </div>
-                    {selectedDistance !== null && (
-                      <div>
-                        <span>直線距離</span>
-                        <strong>{formatDistance(selectedDistance)}</strong>
+                      <div className="selected-station-heading">
+                        <div className="selected-station-copy">
+                          <span className="selected-label">地圖所選站點</span>
+                          <h3>{selectedStation.name}</h3>
+                          <p>
+                            {selectedStation.district}
+                            {selectedStation.district && " · "}
+                            {selectedStation.address}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="fav-btn selected-fav"
+                          aria-pressed={favorites.includes(selectedStation.id)}
+                          aria-label={
+                            favorites.includes(selectedStation.id)
+                              ? `取消最愛：${selectedStation.name}`
+                              : `加入最愛：${selectedStation.name}`
+                          }
+                          onClick={() => onToggleFav(selectedStation.id)}
+                        >
+                          <Star
+                            size={19}
+                            weight={favorites.includes(selectedStation.id) ? "fill" : "regular"}
+                          />
+                        </button>
                       </div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="selected-nav-button"
-                    aria-label={`開啟前往 ${selectedStation.name} 的步行導航`}
-                    title="Android 交由系統選擇地圖 App；iPhone/iPad 開啟 Apple 地圖；無法開啟時改用 Google 地圖"
-                    onClick={() => navigateToStation(selectedStation)}
-                  >
-                    <NavigationArrow size={18} weight="bold" aria-hidden="true" />
-                    <span>步行前往</span>
-                  </button>
-                </section>
+                      <div className="selected-metrics">
+                        <div>
+                          <span>可借車輛</span>
+                          <strong className="available">
+                            {selectedStation.status === 1 ? selectedStation.available : "—"}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>剩餘空位</span>
+                          <strong>
+                            {selectedStation.status === 1 ? selectedStation.empty : "—"}
+                          </strong>
+                        </div>
+                        {selectedDistance !== null && (
+                          <div>
+                            <span>直線距離</span>
+                            <strong>{formatDistance(selectedDistance)}</strong>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="selected-nav-button"
+                        aria-label={`開啟前往 ${selectedStation.name} 的步行導航`}
+                        title="Android 交由系統選擇地圖 App；iPhone/iPad 開啟 Apple 地圖；無法開啟時改用 Google 地圖"
+                        onClick={() => navigateToStation(selectedStation)}
+                      >
+                        <NavigationArrow size={18} weight="bold" aria-hidden="true" />
+                        <span>步行前往</span>
+                      </button>
+                    </section>
+                  )}
+                </div>
               )}
             </section>
 
