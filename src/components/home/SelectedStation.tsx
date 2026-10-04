@@ -2,15 +2,25 @@ import { NavigationArrow, Star } from "@phosphor-icons/react";
 import { formatDistance } from "../../lib/distance";
 import { navigateToStation } from "../../lib/navigation";
 import type { StationView } from "../../lib/schema";
+import { TripButtons } from "../TripButtons";
 
 interface Props {
   station: StationView;
   isFav: boolean;
   distanceMeters: number | null;
+  tripRole: "start" | "end" | null;
   onToggleFavorite: (id: string) => void;
+  onToggleTripStation: (role: "start" | "end", id: string) => void;
 }
 
-export function SelectedStation({ station, isFav, distanceMeters, onToggleFavorite }: Props) {
+export function SelectedStation({
+  station,
+  isFav,
+  distanceMeters,
+  tripRole,
+  onToggleFavorite,
+  onToggleTripStation,
+}: Props) {
   return (
     <section className="selected-station" aria-live="polite" aria-label="地圖所選站點">
       <div className="selected-station-heading">
@@ -49,6 +59,13 @@ export function SelectedStation({ station, isFav, distanceMeters, onToggleFavori
           </div>
         )}
       </div>
+      <TripButtons
+        stationId={station.id}
+        stationName={station.name}
+        tripRole={tripRole}
+        onToggleTripStation={onToggleTripStation}
+        className="trip-buttons selected-trip-buttons"
+      />
       <button
         type="button"
         className="selected-nav-button"
