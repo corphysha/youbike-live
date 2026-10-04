@@ -109,10 +109,16 @@ try {
   assert.deepEqual(errors, []);
   assert.ok(report.workerMessages >= 2, "both feeds must be parsed in the worker");
   assert.ok(
-    report.mainScriptBytes < 450_000,
-    "initial UI JavaScript exceeds the 450 kB decoded budget",
+    report.mainScriptBytes < 500_000,
+    "initial UI JavaScript exceeds the 500 kB decoded budget",
   );
-  assert.ok(report.initialCssBytes < 20_000, "map CSS should not block the initial page");
+  assert.ok(report.initialCssBytes < 24_000, "initial CSS exceeds the 24 kB decoded budget");
+  assert.ok(
+    await evaluate(
+      "!performance.getEntriesByType('resource').some(r => r.name.includes('/css/map.') && r.name.endsWith('.css'))",
+    ),
+    "map CSS should not block the initial page",
+  );
   assert.ok(report.cls <= 0.1, `layout shift budget exceeded: ${report.cls}`);
   assert.ok(
     await evaluate(

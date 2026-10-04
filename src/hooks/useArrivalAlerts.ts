@@ -7,6 +7,7 @@ import {
   collectArrivalTargets,
   createArrivalMonitor,
 } from "../lib/arrival";
+import { buildArrivalMessage, buildRouteMessage } from "../lib/notification-messages";
 import { createRequest } from "../lib/request";
 import type { SavedRoute } from "../lib/routes";
 import type { StationView } from "../lib/schema";
@@ -148,7 +149,6 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
       } finally {
         request.dispose();
       }
-      const { buildArrivalMessage } = await import("../lib/notification-messages");
       const byId = new Map(latest.map((station) => [station.id, station]));
       let shown = 0;
       for (const arrival of arrivals) {
@@ -257,7 +257,6 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
     } finally {
       request.dispose();
     }
-    const { buildRouteMessage } = await import("../lib/notification-messages");
     const message = buildRouteMessage(route, latest);
     setLastAlert({ ...message, at: new Date() });
     if (result !== "granted") {

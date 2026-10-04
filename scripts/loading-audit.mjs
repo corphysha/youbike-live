@@ -38,6 +38,8 @@ try {
     }
     if (location.search.includes("notification-check")) {
       audit.notifications = [];
+      audit.rejections = [];
+      window.addEventListener("unhandledrejection", (event) => audit.rejections.push(String(event.reason)));
       localStorage.setItem("youbike-live:trip", JSON.stringify({ startId: "0", endId: "1" }));
       localStorage.setItem("youbike-live:routes", JSON.stringify([{ id: "0>1", startId: "0", endId: "1" }]));
       localStorage.removeItem("youbike-live:arrival-alerts");
@@ -49,6 +51,8 @@ try {
       navigator.serviceWorker.getRegistration = async () => ({
         showNotification: async (title, options) => { audit.notifications.push({ title, ...options }); }
       });
+      navigator.geolocation.watchPosition = (success) => { audit.watch = success; return 1; };
+      navigator.geolocation.clearWatch = () => { audit.watch = null; };
     }
     audit.areaFail = location.search.includes("area-retry");
     const originalInterval = window.setInterval;
@@ -84,6 +88,7 @@ try {
       }
       if (String(url).includes("station-yb2.json")) {
         audit.stationRequests++;
+        if (audit.offline) throw new TypeError("Failed to fetch");
         if (audit.held) await new Promise((resolve, reject) => {
           audit.releaseStations = resolve;
           options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
@@ -110,9 +115,21 @@ try {
   });
   // Local tile fixtures make request counts independent of the external tile service.
   let tileRequests = 0;
-  await cdp("Fetch.enable", { patterns: [{ urlPattern: "*tile.openstreetmap.org/*" }] });
+  let notificationChunkRequests = 0;
+  await cdp("Fetch.enable", {
+    patterns: [
+      { urlPattern: "*tile.openstreetmap.org/*" },
+      { urlPattern: "*notification-messages-*.js" },
+    ],
+  });
   // The shared CDP helper exposes events through a listener below.
-  on("Fetch.requestPaused", async ({ requestId }) => {
+  on("Fetch.requestPaused", async ({ requestId, request }) => {
+    // Model a stale tab whose notification chunk was removed by a new deployment.
+    if (request.url.includes("notification-messages-")) {
+      notificationChunkRequests++;
+      await cdp("Fetch.failRequest", { requestId, errorReason: "Failed" });
+      return;
+    }
     tileRequests++;
     await cdp("Fetch.fulfillRequest", {
       requestId,
@@ -378,7 +395,7 @@ try {
     2,
     "successful metadata must stay cached in memory",
   );
-  // Notification delivery uses fresh counts and lazy message code, including on older browsers.
+  // Notification delivery uses fresh counts without fetching another chunk, even on older browsers.
   await cdp("Page.navigate", { url: `${targetUrl}?notification-check&legacy-abort` });
   await waitFor('document.querySelectorAll(".station-list .station-card").length === 10');
   await evaluate(
@@ -399,14 +416,52 @@ try {
       'audit.notifications[2].title.startsWith("路線") && audit.notifications[2].body.includes("9")',
     ),
   );
+  assert.equal(notificationChunkRequests, 0, "notification code must ship with the page");
+
+  // The first automatic alert and both manual actions must work after losing connectivity.
+  await cdp("Page.navigate", { url: `${targetUrl}?notification-check&legacy-abort&offline` });
+  await waitFor('document.querySelectorAll(".station-list .station-card").length === 10');
+  await cdp("Network.enable");
+  await cdp("Network.emulateNetworkConditions", {
+    offline: true,
+    latency: 0,
+    downloadThroughput: 0,
+    uploadThroughput: 0,
+  });
+  await evaluate(
+    'audit.offline = true; document.querySelector("[aria-labelledby=alerts-title] [aria-pressed]").click()',
+  );
+  await waitFor("audit.watch");
+  await evaluate("audit.watch({ coords: { latitude: 25.0478, longitude: 121.5319 } })");
+  await waitFor("audit.notifications.length === 1");
   assert.ok(
     await evaluate(
-      "performance.getEntriesByType('resource').some(r => r.name.includes('notification-messages-'))",
+      'audit.notifications[0].title.startsWith("已到達起點") && audit.notifications[0].body.includes("3")',
     ),
+    "first offline arrival uses last known counts",
   );
+  await evaluate(
+    'document.querySelector("[aria-labelledby=alerts-title] .locate-btn[title]").click()',
+  );
+  await waitFor("audit.notifications.length === 3");
+  await waitFor(
+    'document.querySelector("[aria-labelledby=alerts-title]").textContent.includes("已送出 2 則")',
+  );
+  await evaluate('document.querySelector(".saved-routes .route-btn").click()');
+  await waitFor("audit.notifications.length === 4");
+  await waitFor('document.querySelector(".saved-routes").textContent.includes("已送出系統通知")');
+  assert.ok(await evaluate('audit.notifications.every(message => message.body.includes("3"))'));
+  assert.deepEqual(await evaluate("audit.rejections"), [], "no unhandled notification rejections");
+  assert.equal(notificationChunkRequests, 0, "offline alerts need no deployment-sensitive chunk");
+  await cdp("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: 0,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+  });
   assert.deepEqual(errors, [], "browser runtime errors");
   console.log(
-    "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, retained map/tiles/view/selection, refresh, location, cancellation, failure recovery.",
+    "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, retained map/tiles/view/selection, refresh, location, cancellation, failure recovery, online/offline notifications.",
   );
 } catch (error) {
   console.error(
