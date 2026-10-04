@@ -38,3 +38,10 @@ test("service worker provides an offline navigation fallback and preserves netwo
   expect(source).toContain("offline.html");
   expect(source).toContain("fetch(request)");
 });
+
+test("service worker opens or focuses the app when an arrival notification is tapped", async () => {
+  const source = await Bun.file(new URL("../public/sw.js", import.meta.url)).text();
+
+  expect(source).toContain('addEventListener("notificationclick"');
+  expect(source).toContain("openWindow");
+});

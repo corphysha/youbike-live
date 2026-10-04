@@ -3,12 +3,14 @@ import { useEffect, useState } from "react";
 import type { LocationStatus } from "../../hooks/useUserLocation";
 import { type GeoPoint, getDistanceMeters } from "../../lib/distance";
 import type { StationView } from "../../lib/schema";
+import { getTripRole, type Trip } from "../../lib/trip";
 import { StationMap } from "../StationMap";
 import { SelectedStation } from "./SelectedStation";
 
 interface Props {
   stations: StationView[];
   favorites: string[];
+  trip: Trip;
   userLocation: GeoPoint | null;
   locationStatus: LocationStatus;
   locationMessage: string;
@@ -16,11 +18,13 @@ interface Props {
   onRequestLocation: () => void;
   onToggleMap: () => void;
   onToggleFavorite: (id: string) => void;
+  onToggleTripStation: (role: "start" | "end", id: string) => void;
 }
 
 export function StationMapSection({
   stations,
   favorites,
+  trip,
   userLocation,
   locationStatus,
   locationMessage,
@@ -28,6 +32,7 @@ export function StationMapSection({
   onRequestLocation,
   onToggleMap,
   onToggleFavorite,
+  onToggleTripStation,
 }: Props) {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const selectedStation = stations.find((station) => station.id === selectedStationId) ?? null;
@@ -100,7 +105,9 @@ export function StationMapSection({
               station={selectedStation}
               isFav={favorites.includes(selectedStation.id)}
               distanceMeters={selectedDistance}
+              tripRole={getTripRole(trip, selectedStation.id)}
               onToggleFavorite={onToggleFavorite}
+              onToggleTripStation={onToggleTripStation}
             />
           )}
         </div>
