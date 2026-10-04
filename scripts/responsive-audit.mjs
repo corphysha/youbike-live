@@ -19,17 +19,7 @@ if (!targetUrl) {
   };
   localServer = createServer((request, response) => {
     const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
-    const prefix = "/youbike-live/";
-    const relativePath =
-      pathname === "/youbike-live" || pathname === prefix
-        ? "index.html"
-        : pathname.startsWith(prefix)
-          ? pathname.slice(prefix.length)
-          : null;
-    if (relativePath === null) {
-      response.writeHead(404).end("Not found");
-      return;
-    }
+    const relativePath = pathname === "/" ? "index.html" : pathname.slice(1);
     const filePath = resolve(outputRoot, relativePath);
     if (
       !filePath.startsWith(`${outputRoot}/`) ||
@@ -49,7 +39,7 @@ if (!targetUrl) {
     localServer.once("error", rejectListen);
     localServer.listen(4180, "127.0.0.1", resolveListen);
   });
-  targetUrl = "http://127.0.0.1:4180/youbike-live/";
+  targetUrl = "http://127.0.0.1:4180/";
 }
 const profile = `/home/openclaw/.hermes/cache/scratch/youbike-audit-${process.pid}`;
 const chrome = spawn(

@@ -9,8 +9,8 @@ export default function App({ Component, pageProps }: AppProps) {
     if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
 
     void navigator.serviceWorker
-      .register("/youbike-live/sw.js", {
-        scope: "/youbike-live/",
+      .register("/sw.js", {
+        scope: "/",
         updateViaCache: "none",
       })
       .catch(() => undefined);
