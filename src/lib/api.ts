@@ -1,5 +1,8 @@
-import { z } from "zod";
-import { type Area, areaSchema, type StationView, stationSchema, toView } from "./schema";
+import { FeedError } from "./feed-error";
+import { parseFeedAsync } from "./feed-parser";
+import type { Area, StationView } from "./schema";
+
+export { FeedError } from "./feed-error";
 
 const STATION_URL = "https://apis.youbike.com.tw/json/station-yb2.json";
 const AREA_URL = "https://apis.youbike.com.tw/json/area-all.json";
@@ -10,49 +13,28 @@ function requestSignal(signal?: AbortSignal): AbortSignal {
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
-export class FeedError extends Error {
-  constructor(
-    message: string,
-    public readonly cause?: unknown,
-  ) {
-    super(message);
-    this.name = "FeedError";
-  }
-}
-
 /** Fetch + validate the unified station feed; unknown extra fields are dropped. */
 export async function fetchStations(signal?: AbortSignal): Promise<StationView[]> {
+  const combinedSignal = requestSignal(signal);
   let res: Response;
   try {
-    res = await fetch(STATION_URL, { signal: requestSignal(signal), cache: "no-store" });
+    res = await fetch(STATION_URL, { signal: combinedSignal, cache: "no-store" });
   } catch (err) {
     throw new FeedError("無法連線到 YouBike 資料來源", err);
   }
   if (!res.ok) {
     throw new FeedError(`資料來源回應 ${res.status}`);
   }
-  const json: unknown = await res.json().catch((err) => {
-    throw new FeedError("資料格式不是 JSON", err);
-  });
-  const parsed = z.array(stationSchema).safeParse(json);
-  if (!parsed.success) {
-    throw new FeedError("站點資料格式驗證失敗（feed 格式可能已變動）");
-  }
-  return parsed.data
-    .filter(
-      (s) => Number.isFinite(Number.parseFloat(s.lat)) && Number.isFinite(Number.parseFloat(s.lng)),
-    )
-    .map(toView);
+  return parseFeedAsync("stations", await res.text(), combinedSignal);
 }
 
 /** Fetch + validate the area feed; returns [] when unavailable (non-fatal). */
 export async function fetchAreas(signal?: AbortSignal): Promise<Area[]> {
   try {
-    const res = await fetch(AREA_URL, { signal: requestSignal(signal), cache: "default" });
+    const combinedSignal = requestSignal(signal);
+    const res = await fetch(AREA_URL, { signal: combinedSignal, cache: "default" });
     if (!res.ok) return [];
-    const json: unknown = await res.json();
-    const parsed = z.array(areaSchema).safeParse(json);
-    return parsed.success ? parsed.data : [];
+    return await parseFeedAsync("areas", await res.text(), combinedSignal);
   } catch {
     return [];
   }

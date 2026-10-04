@@ -60,7 +60,7 @@ export function StationMap({ active, stations, selectedId, userLocation, onSelec
 
     const createMap = async () => {
       try {
-        const leafletModule = await import("leaflet");
+        const [leafletModule] = await Promise.all([import("leaflet"), import("../styles/map.css")]);
         const leaflet = (leafletModule.default ?? leafletModule) as typeof import("leaflet");
         await import("leaflet.markercluster");
 

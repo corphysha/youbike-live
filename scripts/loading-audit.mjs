@@ -21,6 +21,16 @@ try {
     if (location.search.includes("denied")) audit.denied = true;
     if (location.search.includes("failure")) audit.fail = true;
     if (location.search.includes("fallback")) delete window.IntersectionObserver;
+    if (location.search.includes("worker-disabled")) delete window.Worker;
+    if (location.search.includes("worker-blocked")) window.Worker = class {
+      constructor() { throw new Error("Worker blocked by policy"); }
+    };
+    if (location.search.includes("worker-error")) {
+      const NativeWorker = window.Worker;
+      window.Worker = class extends NativeWorker {
+        constructor() { super('data:text/javascript,throw new Error("Worker startup failure")', { type: "module" }); }
+      };
+    }
     audit.mapCreates = 0;
     Object.defineProperty(window, "L", {
       configurable: true,
@@ -52,6 +62,7 @@ try {
           audit.releaseStations = resolve;
           options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
         });
+        if (audit.invalid) return new Response("not JSON");
         if (audit.fail) return new Response("unavailable", { status: 503 });
         return Response.json(Array.from({ length: 10000 }, (_, i) => ({
           station_no: String(i), name_tw: "測試站 " + i, name_en: "Station " + i,
@@ -121,6 +132,11 @@ try {
   );
   await evaluate('document.querySelector("#map-body").scrollIntoView()');
   await waitFor("audit.mapCreates === 1 && document.querySelector('.user-location-dot')");
+  assert.equal(
+    await evaluate('getComputedStyle(document.querySelector(".leaflet-map-pane")).position'),
+    "absolute",
+    "lazy Leaflet CSS must load before the map is usable",
+  );
   await evaluate(
     `void (audit.clusters = Object.values(audit.map._layers).find(layer => layer.getLayers && layer.zoomToShowLayer))`,
   );
@@ -254,6 +270,31 @@ try {
   await waitFor('audit.map.getSize().x === document.querySelector(".map-canvas").clientWidth');
   assert.equal(await evaluate("audit.mapCreates"), 1);
   assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
+  for (const mode of ["worker-disabled", "worker-blocked", "worker-error"]) {
+    await cdp("Page.navigate", { url: `${targetUrl}?${mode}` });
+    await waitFor('document.querySelectorAll(".station-list .station-card").length === 10', mode);
+    await evaluate("audit.releaseAreas()");
+    await waitFor('document.querySelector(".chip-row").textContent.includes("測試縣市")');
+    assert.ok(
+      await evaluate(
+        "performance.getEntriesByType('resource').some(r => r.name.includes('/chunks/parse-feed-'))",
+      ),
+      `${mode} must use validated fallback`,
+    );
+  }
+  // Parser errors in the real worker must preserve data and allow another refresh.
+  await cdp("Page.navigate", { url: targetUrl });
+  await waitFor('document.querySelectorAll(".station-list .station-card").length === 10');
+  await evaluate('audit.invalid = true; document.querySelector(".refresh-btn").click()');
+  await delay(150);
+  assert.equal(
+    await evaluate('document.querySelectorAll(".station-list .station-card").length'),
+    10,
+  );
+  await evaluate(
+    'audit.invalid = false; audit.available = 6; document.querySelector(".refresh-btn").click()',
+  );
+  await waitFor('document.querySelector(".summary-line").textContent.includes("60,000")');
   assert.deepEqual(errors, [], "browser runtime errors");
   console.log(
     "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, retained map/tiles/view/selection, refresh, location, cancellation, failure recovery.",

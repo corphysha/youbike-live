@@ -673,6 +673,12 @@ a {
   justify-items: center;
 }
 
+/* Keep the footer below the viewport while the station results are loading. */
+.feed-loading {
+  min-height: 100vh;
+  align-content: start;
+}
+
 .empty-state .big-icon {
   font-size: 34px;
   opacity: 0.55;

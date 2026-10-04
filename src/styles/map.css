@@ -1,0 +1,3 @@
+/* Vendor styles load with the map; unlayered app styles keep precedence. */
+@import "leaflet/dist/leaflet.css" layer(map-vendor);
+@import "leaflet.markercluster/dist/MarkerCluster.css" layer(map-vendor);

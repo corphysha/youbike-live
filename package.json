@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "package:pages": "bun scripts/package-pages.mjs",
-    "audit:loading": "bun scripts/loading-audit.mjs"
+    "audit:loading": "bun scripts/loading-audit.mjs",
+    "audit:performance": "bun scripts/performance-audit.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

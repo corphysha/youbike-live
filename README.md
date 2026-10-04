@@ -45,7 +45,7 @@ bun run audit:responsive
 - `src/hooks/`：資料更新、定位、最愛、地圖收合與搜尋分頁的狀態和生命週期。
 - `src/lib/stations.ts`：不依賴瀏覽器的站點篩選、距離排序、縣市選項與統計。
 
-全域與 Leaflet CSS 統一由 `src/pages/_app.tsx` 載入；瀏覽器 API 在 effect 或事件處理中使用，
+全域 CSS 由 `src/pages/_app.tsx` 載入，Leaflet CSS 隨地圖延後載入；瀏覽器 API 在 effect 或事件處理中使用，
 讓 vinext 靜態匯出與 Next.js Pages Router 的伺服器渲染保持相容。
 
 ## CI 與部署
@@ -77,3 +77,33 @@ bun run audit:responsive  # 320–1024px 排版、主題、定位、站點選取
 `audit:loading` 已加入 CI，使用固定資料與圖磚回應，不依賴外部資料來源。
 `audit:responsive` 預設使用即時資料；也可設定 `STATION_FEED_PATH` 為下載的官方 JSON，
 以同一份資料重現檢查結果。
+
+## 效能量測與預算
+
+- 使用 module Web Worker 解析及驗證兩個 feed，讓大型 JSON 與 Zod 不阻塞 UI。
+  瀏覽器不支援、政策阻擋或 worker 啟動失敗時，自動延後載入相同驗證程式作為備援。
+- 搜尋使用 React `useDeferredValue`，優先回應輸入；結果仍由完整站點資料計算。
+- Leaflet CSS 隨地圖載入，透過 CSS cascade layer 保留網站主題樣式的優先權。
+- 載入畫面預留高度，避免站點出現時把頁尾大幅推離畫面。
+- Service worker 對有建置雜湊的 `_next/static/` 資產採 cache-first；HTML 保持
+  network-first，外部即時 feed 不經本站 service worker 快取。
+
+```bash
+bun run build
+bun run audit:performance
+# 可設定 REPORT_PATH=/tmp/performance.json 保存量測結果
+```
+
+效能 audit 使用 390×844 畫面、4 倍 CPU 降速、10,000 站（約 4.56 MB）的固定 feed，
+回應延遲 300 ms，網頁資產由本機提供。它使用 PerformanceObserver 記錄 LCP、CLS、
+long tasks 及可信任鍵盤輸入的 Event Timing。CI 強制檢查 CLS ≤ 0.1、主執行緒 JS
+< 450 KB、初始 CSS < 20 KB（皆為解碼後大小），並確認兩個 feed 確實由 worker 處理。
+時間量測會受執行機影響，因此 LCP、長任務與互動時間只作診斷，不設易波動的 CI 門檻。
+
+相較此 PR 第一版，在相同本機情境下，主執行緒 JS 約 491 → 407 KB，初始 CSS 約
+27.2 → 15.9 KB，載入 CLS 約 0.91 → 0.005。Worker 仍需下載自己的驗證程式；這是
+移出 UI 執行緒，並非宣稱全部 JavaScript 下載量減少。站點下載大小也沒有改變。
+
+這些是實驗室回歸量測，不能當作真實使用者 Core Web Vitals 或正式 INP。若要判斷
+實際使用品質，應依裝置分組觀察真實流量第 75 百分位，目標為 LCP ≤ 2.5 s、
+INP ≤ 200 ms、CLS ≤ 0.1；本專案沒有新增遠端效能追蹤或傳送定位資料。

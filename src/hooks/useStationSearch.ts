@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { GeoPoint } from "../lib/distance";
 import type { Area, StationView } from "../lib/schema";
 import {
@@ -26,7 +26,8 @@ export function useStationSearch({ stations, areas, favorites, userLocation }: O
   const visible = pageSize + additionalCount;
 
   const stationAreas = useMemo(() => getStationAreas(stations, areas), [stations, areas]);
-  const normalizedQuery = normalizeStationQuery(query);
+  // Keep typing urgent; nationwide filtering can render at a lower priority.
+  const normalizedQuery = useDeferredValue(normalizeStationQuery(query));
   const filtered = useMemo(
     () => filterStations(stations, { normalizedQuery, areaCode, favOnly, favorites, userLocation }),
     [stations, normalizedQuery, areaCode, favOnly, favorites, userLocation],

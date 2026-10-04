@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "youbike-live-shell-";
-const CACHE_NAME = `${CACHE_PREFIX}v1`;
+const CACHE_NAME = `${CACHE_PREFIX}v2`;
 const scopeUrl = (path = "") => new URL(path, self.registration.scope).toString();
 const offlineUrl = scopeUrl("offline.html");
 const preloadUrls = [
@@ -50,6 +50,12 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
+
+      // Build hashes identify immutable assets. HTML and live feeds stay fresh.
+      if (url.pathname.startsWith(`${scopePath}_next/static/`)) {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+      }
 
       try {
         const response = await fetch(request);
