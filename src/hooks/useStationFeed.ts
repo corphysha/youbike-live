@@ -16,10 +16,30 @@ export function useStationFeed() {
 
   const inFlight = useRef<AbortController | null>(null);
 
+  const areaInFlight = useRef<AbortController | null>(null);
+  const areasLoaded = useRef(false);
+  const loadAreas = useCallback(async () => {
+    if (areasLoaded.current || areaInFlight.current) return;
+    const controller = new AbortController();
+    areaInFlight.current = controller;
+    try {
+      const nextAreas = await fetchAreas(controller.signal);
+      if (controller.signal.aborted) return;
+      if (nextAreas.length > 0) {
+        areasLoaded.current = true;
+        setAreas(nextAreas);
+      }
+    } finally {
+      if (areaInFlight.current === controller) areaInFlight.current = null;
+    }
+  }, []);
+
   const load = useCallback(async () => {
     if (inFlight.current) return;
     const controller = new AbortController();
     inFlight.current = controller;
+    // Retry missing area metadata independently; never hold up the live feed.
+    void loadAreas();
     try {
       const s = await fetchStations(controller.signal);
       if (controller.signal.aborted) return;
@@ -34,24 +54,17 @@ export function useStationFeed() {
     } finally {
       if (inFlight.current === controller) inFlight.current = null;
     }
-  }, []);
+  }, [loadAreas]);
 
   useEffect(() => {
     void load();
     return () => {
       inFlight.current?.abort();
       inFlight.current = null;
+      areaInFlight.current?.abort();
+      areaInFlight.current = null;
     };
   }, [load]);
-
-  // Area names change infrequently and must never delay the live station results.
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetchAreas(controller.signal).then((nextAreas) => {
-      if (!controller.signal.aborted) setAreas(nextAreas);
-    });
-    return () => controller.abort();
-  }, []);
 
   // refresh while visible
   useEffect(() => {

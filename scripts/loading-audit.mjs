@@ -31,6 +31,17 @@ try {
         constructor() { super('data:text/javascript,throw new Error("Worker startup failure")', { type: "module" }); }
       };
     }
+    if (location.search.includes("legacy-abort")) {
+      delete AbortSignal.any;
+      delete AbortSignal.timeout;
+      delete AbortSignal.prototype.throwIfAborted;
+    }
+    audit.areaFail = location.search.includes("area-retry");
+    const originalInterval = window.setInterval;
+    window.setInterval = (callback, ms, ...args) => {
+      if (ms === 60000) audit.refresh = callback;
+      return originalInterval(callback, ms, ...args);
+    };
     audit.mapCreates = 0;
     Object.defineProperty(window, "L", {
       configurable: true,
@@ -50,6 +61,7 @@ try {
     window.fetch = async (url, options) => {
       if (String(url).includes("area-all.json")) {
         audit.areaRequests++;
+        if (audit.areaFail) return new Response("unavailable", { status: 503 });
         return new Promise((resolve) => {
           audit.releaseAreas = () => resolve(Response.json([
             { area_code: "00", area_name_tw: "測試縣市", sort: 1 }
@@ -193,14 +205,37 @@ try {
     selection,
   );
 
-  // A changed position while hidden is applied once, without replacing the map.
-  await evaluate(
-    'document.querySelector(".map-toggle").click(); audit.lat += 0.03; document.querySelector(".locate-btn").click()',
-  );
-  await waitFor('document.querySelectorAll(".station-list .station-card").length === 10');
-  await evaluate('document.querySelector(".map-toggle").click()');
-  await waitFor("Math.abs(audit.map.getCenter().lat - audit.lat) < 0.00001");
-  assert.equal(await evaluate("audit.mapCreates"), 1);
+  // Resize and relocate while hidden; both instant and animated recentering must use the new size.
+  for (const [width, motion] of [
+    [390, "reduce"],
+    [1024, "no-preference"],
+  ]) {
+    await evaluate(
+      'document.querySelector(".map-toggle").click(); audit.lat += 0.03; audit.lng += 0.01; document.querySelector(".locate-btn").click()',
+    );
+    await waitFor('document.querySelectorAll(".station-list .station-card").length === 10');
+    await cdp("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 844,
+      deviceScaleFactor: 1,
+      mobile: width < 768,
+    });
+    await cdp("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-motion", value: motion }],
+    });
+    await evaluate('document.querySelector(".map-toggle").click()');
+    await waitFor(
+      "Math.abs(audit.map.getCenter().lat - audit.lat) < 0.00001 && Math.abs(audit.map.getCenter().lng - audit.lng) < 0.00001",
+    );
+    await delay(800);
+    assert.ok(
+      await evaluate(
+        "Math.abs(audit.map.getCenter().lat - audit.lat) < 0.00001 && Math.abs(audit.map.getCenter().lng - audit.lng) < 0.00001",
+      ),
+      "recenter must remain correct after resize/animation completes",
+    );
+    assert.equal(await evaluate("audit.mapCreates"), 1);
+  }
 
   // Search must still find stations outside the initial ten, including after interrupted batches.
   const search = async (value) => {
@@ -270,7 +305,12 @@ try {
   await waitFor('audit.map.getSize().x === document.querySelector(".map-canvas").clientWidth');
   assert.equal(await evaluate("audit.mapCreates"), 1);
   assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
-  for (const mode of ["worker-disabled", "worker-blocked", "worker-error"]) {
+  for (const mode of [
+    "worker-disabled",
+    "worker-blocked",
+    "worker-error",
+    "worker-disabled&legacy-abort",
+  ]) {
     await cdp("Page.navigate", { url: `${targetUrl}?${mode}` });
     await waitFor('document.querySelectorAll(".station-list .station-card").length === 10', mode);
     await evaluate("audit.releaseAreas()");
@@ -295,6 +335,23 @@ try {
     'audit.invalid = false; audit.available = 6; document.querySelector(".refresh-btn").click()',
   );
   await waitFor('document.querySelector(".summary-line").textContent.includes("60,000")');
+  // Failed metadata retries on the next automatic refresh without delaying stations.
+  await cdp("Page.navigate", { url: `${targetUrl}?area-retry` });
+  await waitFor('document.querySelectorAll(".station-list .station-card").length === 10');
+  assert.equal(await evaluate("audit.areaRequests"), 1);
+  await evaluate("audit.areaFail = false; audit.refresh()");
+  await waitFor("audit.areaRequests === 2");
+  await evaluate('document.querySelector(".refresh-btn").click()');
+  assert.equal(await evaluate("audit.areaRequests"), 2, "pending metadata must be deduplicated");
+  await evaluate("audit.releaseAreas()");
+  await waitFor('document.querySelector(".chip-row").textContent.includes("測試縣市")');
+  await evaluate('audit.available = 9; document.querySelector(".refresh-btn").click()');
+  await waitFor('document.querySelector(".summary-line").textContent.includes("90,000")');
+  assert.equal(
+    await evaluate("audit.areaRequests"),
+    2,
+    "successful metadata must stay cached in memory",
+  );
   assert.deepEqual(errors, [], "browser runtime errors");
   console.log(
     "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, retained map/tiles/view/selection, refresh, location, cancellation, failure recovery.",

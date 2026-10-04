@@ -262,6 +262,8 @@ export function StationMap({ active, stations, selectedId, userLocation, onSelec
       .bindTooltip("目前位置")
       .addTo(userLayer);
 
+    // Hidden maps may have been resized. Re-measure before computing the new view.
+    map.invalidateSize({ pan: false });
     const nextZoom = Math.max(map.getZoom(), 14);
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reducedMotion) {

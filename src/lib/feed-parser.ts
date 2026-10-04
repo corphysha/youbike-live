@@ -1,5 +1,6 @@
 import { FeedError } from "./feed-error";
 import type { FeedData } from "./parse-feed";
+import { throwIfAborted } from "./request";
 
 class WorkerUnavailable extends Error {}
 let worker: Worker | null = null;
@@ -46,7 +47,7 @@ export async function parseFeedAsync<K extends keyof FeedData>(
   source: string,
   signal?: AbortSignal,
 ): Promise<FeedData[K]> {
-  signal?.throwIfAborted();
+  throwIfAborted(signal);
   if (!unavailable && typeof window !== "undefined" && typeof Worker !== "undefined") {
     let parser: Worker | null = null;
     try {
@@ -61,7 +62,7 @@ export async function parseFeedAsync<K extends keyof FeedData>(
         return await new Promise<FeedData[K]>((resolve, reject) => {
           onAbort = () => {
             pending.delete(id);
-            reject(signal?.reason);
+            reject(signal?.reason ?? new DOMException("Request cancelled", "AbortError"));
           };
           pending.set(id, { resolve: (data) => resolve(data as FeedData[K]), reject });
           signal?.addEventListener("abort", onAbort, { once: true });
@@ -77,6 +78,6 @@ export async function parseFeedAsync<K extends keyof FeedData>(
   }
   // Unsupported or blocked workers retain the same validation and error behavior.
   const { parseFeed } = await import("./parse-feed");
-  signal?.throwIfAborted();
+  throwIfAborted(signal);
   return parseFeed(kind, source);
 }
