@@ -4,11 +4,12 @@ import {
   type ArrivalMessage,
   type ArrivalMonitor,
   type ArrivalTarget,
-  buildArrivalMessage,
   collectArrivalTargets,
   createArrivalMonitor,
 } from "../lib/arrival";
-import { buildRouteMessage, type SavedRoute } from "../lib/routes";
+import { buildArrivalMessage, buildRouteMessage } from "../lib/notification-messages";
+import { createRequest } from "../lib/request";
+import type { SavedRoute } from "../lib/routes";
 import type { StationView } from "../lib/schema";
 import type { Trip } from "../lib/trip";
 
@@ -140,10 +141,13 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
     ) => {
       // A hidden page pauses feed refreshes, so fetch the latest counts before reporting them.
       let latest = stationsRef.current;
+      const request = createRequest(FRESH_FEED_TIMEOUT_MS);
       try {
-        latest = await fetchStations(AbortSignal.timeout(FRESH_FEED_TIMEOUT_MS));
+        latest = await fetchStations(request.signal);
       } catch {
         // report the last known counts instead
+      } finally {
+        request.dispose();
       }
       const byId = new Map(latest.map((station) => [station.id, station]));
       let shown = 0;
@@ -245,10 +249,13 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
     setPermission(result);
     setRouteStatus("查詢中…");
     let latest = stationsRef.current;
+    const request = createRequest(FRESH_FEED_TIMEOUT_MS);
     try {
-      latest = await fetchStations(AbortSignal.timeout(FRESH_FEED_TIMEOUT_MS));
+      latest = await fetchStations(request.signal);
     } catch {
       // report the last known counts instead
+    } finally {
+      request.dispose();
     }
     const message = buildRouteMessage(route, latest);
     setLastAlert({ ...message, at: new Date() });

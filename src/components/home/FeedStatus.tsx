@@ -11,7 +11,7 @@ export function FeedStatus({ state, errorMessage, onRetry }: Props) {
   return (
     <>
       {state === "loading" && (
-        <div className="empty-state">
+        <div className="empty-state feed-loading" role="status">
           <div className="big-icon" aria-hidden="true">
             <Bicycle size={36} />
           </div>

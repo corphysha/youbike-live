@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import {
   ALERT_COOLDOWN_MS,
-  buildArrivalMessage,
   collectArrivalTargets,
   createArrivalMonitor,
   detectArrivals,
   INITIAL_ARRIVAL_STATE,
 } from "../src/lib/arrival";
+import { buildArrivalMessage } from "../src/lib/notification-messages";
 import type { StationView } from "../src/lib/schema";
 
 function station(id: string, overrides: Partial<StationView> = {}): StationView {

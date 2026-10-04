@@ -1,6 +1,7 @@
 import { type GeoPoint, getDistanceMeters } from "./distance";
 import type { StationView } from "./schema";
-import { findAlternatives } from "./trip";
+
+export type { ArrivalMessage } from "./notification-messages";
 
 /** Entering this radius counts as arriving at a station. */
 export const ARRIVAL_RADIUS_METERS = 150;
@@ -72,47 +73,6 @@ export function detectArrivals(
   }
 
   return { arrivals, state: { inside, lastAlertAt } };
-}
-
-const ARRIVED_LABEL: Record<ArrivalRole, string> = {
-  favorite: "已到達最愛站點",
-  start: "已到達起點",
-  end: "已到達終點",
-};
-
-/** Used when the user asks for the current status without having arrived. */
-const STATUS_LABEL: Record<ArrivalRole, string> = {
-  favorite: "最愛站點",
-  start: "起點",
-  end: "終點",
-};
-
-export interface ArrivalMessage {
-  title: string;
-  body: string;
-}
-
-export function buildArrivalMessage(
-  { station, role }: ArrivalTarget,
-  stations: StationView[] = [],
-  { arrived = true } = {},
-): ArrivalMessage {
-  const title = `${(arrived ? ARRIVED_LABEL : STATUS_LABEL)[role]}：${station.name}`;
-  if (station.status !== 1) return { title, body: "此站暫停營運，請改用附近站點。" };
-
-  const bikes = `可借 ${station.available} 輛`;
-  const docks = `空位 ${station.empty} 格`;
-  const counts = role === "end" ? `${docks} · ${bikes}` : `${bikes} · ${docks}`;
-  const lacking = role === "end" ? station.empty === 0 : station.available === 0;
-  if (role === "favorite" || !lacking) return { title, body: counts };
-
-  const [nearest] = findAlternatives(stations, station, role, { limit: 1 });
-  const hint = nearest
-    ? `附近「${nearest.station.name}」${
-        role === "end" ? `空位 ${nearest.station.empty} 格` : `可借 ${nearest.station.available} 輛`
-      }（約 ${Math.round(nearest.distance)} 公尺）`
-    : "500 公尺內沒有其他可用站點";
-  return { title, body: `${counts}。${hint}` };
 }
 
 export interface ArrivalMonitor {

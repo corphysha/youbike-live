@@ -1,0 +1,94 @@
+/* Vendor styles load with the map; unlayered app styles keep precedence. */
+@import "leaflet/dist/leaflet.css" layer(map-vendor);
+@import "leaflet.markercluster/dist/MarkerCluster.css" layer(map-vendor);
+
+/* Marker and tile styles are only needed after the map becomes visible. */
+.leaflet-container {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+
+.leaflet-bar a,
+.leaflet-control-attribution {
+  background: var(--bg-raised) !important;
+  color: var(--ink-2) !important;
+}
+
+.leaflet-bar a {
+  border-color: var(--line) !important;
+}
+
+.leaflet-bar a:hover {
+  background: var(--bg-sunken) !important;
+  color: var(--ink) !important;
+}
+
+.station-pin-icon,
+.station-cluster-icon {
+  border: 0;
+  background: transparent;
+}
+
+.station-pin {
+  position: absolute;
+  inset: 5px;
+  display: block;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 5px rgb(25 30 20 / 0.38);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.station-pin.is-offline {
+  background: var(--ink-3);
+}
+
+.station-pin.is-selected {
+  transform: scale(1.45);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.station-cluster {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 2px solid var(--bg-raised);
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 1px 6px rgb(25 30 20 / 0.25);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.station-cluster--medium {
+  width: 46px;
+  height: 46px;
+}
+
+.station-cluster--large {
+  width: 52px;
+  height: 52px;
+  font-size: 13px;
+}
+
+:root[data-theme="dark"] .leaflet-tile-pane {
+  filter: invert(0.88) hue-rotate(180deg) brightness(0.82) saturate(0.72);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .leaflet-tile-pane {
+    filter: invert(0.88) hue-rotate(180deg) brightness(0.82) saturate(0.72);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .station-pin {
+    transition: none;
+  }
+}

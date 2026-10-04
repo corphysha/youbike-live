@@ -4,6 +4,7 @@ import type { GeoPoint } from "../lib/distance";
 import type { StationView } from "../lib/schema";
 
 interface Props {
+  active: boolean;
   stations: StationView[];
   selectedId: string | null;
   userLocation: GeoPoint | null;
@@ -27,7 +28,7 @@ function stationIcon(
   });
 }
 
-export function StationMap({ stations, selectedId, userLocation, onSelectStation }: Props) {
+export function StationMap({ active, stations, selectedId, userLocation, onSelectStation }: Props) {
   const mapElement = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
@@ -35,8 +36,13 @@ export function StationMap({ stations, selectedId, userLocation, onSelectStation
   const userLayerRef = useRef<Leaflet.LayerGroup | null>(null);
   const markersRef = useRef(new Map<string, Leaflet.Marker>());
   const stationByIdRef = useRef(new Map<string, StationView>());
+  const renderedStationsRef = useRef(new Map<string, StationView>());
+  const completedStationsRef = useRef<StationView[] | null>(null);
   const onSelectRef = useRef(onSelectStation);
   const selectedIdRef = useRef(selectedId);
+  const locationRef = useRef(userLocation);
+  locationRef.current = userLocation;
+  const lastLocationRef = useRef<GeoPoint | null>(null);
   const lastSelectedIdRef = useRef<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
@@ -54,15 +60,17 @@ export function StationMap({ stations, selectedId, userLocation, onSelectStation
 
     const createMap = async () => {
       try {
-        const leafletModule = await import("leaflet");
+        const [leafletModule] = await Promise.all([import("leaflet"), import("../styles/map.css")]);
         const leaflet = (leafletModule.default ?? leafletModule) as typeof import("leaflet");
         await import("leaflet.markercluster");
 
         if (cancelled || !mapElement.current) return;
 
         const map = leaflet.map(mapElement.current, {
-          center: [23.6978, 120.9605],
-          zoom: 7,
+          center: locationRef.current
+            ? [locationRef.current.lat, locationRef.current.lng]
+            : [23.6978, 120.9605],
+          zoom: locationRef.current ? 14 : 7,
           minZoom: 6,
           maxZoom: 19,
           scrollWheelZoom: false,
@@ -78,7 +86,8 @@ export function StationMap({ stations, selectedId, userLocation, onSelectStation
           .addTo(map);
 
         const clusters = leaflet.markerClusterGroup({
-          chunkedLoading: true,
+          // Batches below are cancellable when filters change or the map is hidden.
+          chunkedLoading: false,
           removeOutsideVisibleBounds: true,
           showCoverageOnHover: false,
           spiderfyOnMaxZoom: true,
@@ -101,7 +110,6 @@ export function StationMap({ stations, selectedId, userLocation, onSelectStation
         clustersRef.current = clusters;
         userLayerRef.current = userLayer;
         setMapReady(true);
-        window.setTimeout(() => map.invalidateSize(), 0);
       } catch {
         if (!cancelled) setMapError(true);
       }
@@ -118,38 +126,98 @@ export function StationMap({ stations, selectedId, userLocation, onSelectStation
       leafletRef.current = null;
       markersRef.current.clear();
       stationByIdRef.current.clear();
+      renderedStationsRef.current.clear();
+      completedStationsRef.current = null;
+      lastLocationRef.current = null;
+      lastSelectedIdRef.current = null;
     };
   }, []);
 
   useEffect(() => {
+    if (!mapReady || !active) return;
+    // A hidden map has no dimensions. Re-measure without changing its center or zoom.
+    const frame = requestAnimationFrame(() => mapRef.current?.invalidateSize({ pan: false }));
+    return () => cancelAnimationFrame(frame);
+  }, [active, mapReady]);
+
+  useEffect(() => {
     const clusters = clustersRef.current;
     const leaflet = leafletRef.current;
-    if (!mapReady || !clusters || !leaflet) return;
+    if (!active || !mapReady || !clusters || !leaflet) return;
+    if (completedStationsRef.current === stations) return;
 
-    const markers = new Map<string, Leaflet.Marker>();
-    const stationById = new Map<string, StationView>();
-    const layers = stations.map((station) => {
-      const marker = leaflet.marker([station.lat, station.lng], {
-        icon: stationIcon(leaflet, station.id === selectedIdRef.current, station.status !== 1),
-        title: `${station.name}，可借 ${station.available} 輛，空位 ${station.empty} 格`,
-        alt: station.name,
-        keyboard: true,
-      });
-      marker.on("click", () => onSelectRef.current(station));
-      markers.set(station.id, marker);
-      stationById.set(station.id, station);
-      return marker;
-    });
-
-    clusters.clearLayers();
-    clusters.addLayers(layers);
-    markersRef.current = markers;
+    const markers = markersRef.current;
+    const renderedStations = renderedStationsRef.current;
+    const stationById = new Map(stations.map((station) => [station.id, station]));
     stationByIdRef.current = stationById;
-  }, [stations, mapReady]);
+    const removed: Leaflet.Marker[] = [];
+    for (const [id, marker] of markers) {
+      if (!stationById.has(id)) {
+        removed.push(marker);
+        markers.delete(id);
+        renderedStations.delete(id);
+      }
+    }
+    clusters.removeLayers(removed);
+
+    let index = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const updateBatch = () => {
+      // With GPS, stations arrive nearest-first. Paint those ten before the rest.
+      const end = Math.min(index + (index === 0 ? 10 : 200), stations.length);
+      const added: Leaflet.Marker[] = [];
+      for (; index < end; index += 1) {
+        const station = stations[index];
+        if (!station) continue;
+        const title = `${station.name}，可借 ${station.available} 輛，空位 ${station.empty} 格`;
+        let marker = markers.get(station.id);
+        if (!marker) {
+          marker = leaflet.marker([station.lat, station.lng], {
+            icon: stationIcon(leaflet, station.id === selectedIdRef.current, station.status !== 1),
+            title,
+            alt: station.name,
+            keyboard: true,
+          });
+          marker.on("click", () => {
+            const current = stationByIdRef.current.get(station.id);
+            if (current) onSelectRef.current(current);
+          });
+          markers.set(station.id, marker);
+          added.push(marker);
+        } else {
+          const position = marker.getLatLng();
+          if (position.lat !== station.lat || position.lng !== station.lng) {
+            clusters.removeLayer(marker);
+            marker.setLatLng([station.lat, station.lng]);
+            added.push(marker);
+          }
+          if (renderedStations.get(station.id)?.status !== station.status) {
+            marker.setIcon(
+              stationIcon(leaflet, station.id === selectedIdRef.current, station.status !== 1),
+            );
+          }
+          marker.options.title = title;
+          marker.options.alt = station.name;
+          const element = marker.getElement();
+          if (element) {
+            element.title = title;
+            element.setAttribute("alt", station.name);
+          }
+        }
+        renderedStations.set(station.id, station);
+      }
+      clusters.addLayers(added);
+      if (index < stations.length) timer = setTimeout(updateBatch, 16);
+      else completedStationsRef.current = stations;
+    };
+    updateBatch();
+    return () => clearTimeout(timer);
+  }, [stations, mapReady, active]);
 
   useEffect(() => {
     const leaflet = leafletRef.current;
-    if (!mapReady || !leaflet) return;
+    if (!active || !mapReady || !leaflet) return;
+    if (lastSelectedIdRef.current === selectedId) return;
 
     for (const id of [lastSelectedIdRef.current, selectedId]) {
       if (!id) continue;
@@ -157,16 +225,18 @@ export function StationMap({ stations, selectedId, userLocation, onSelectStation
       const station = stationByIdRef.current.get(id);
       if (!marker || !station) continue;
       marker.setIcon(stationIcon(leaflet, id === selectedId, station.status !== 1));
-      if (id === selectedId) marker.setZIndexOffset(500);
+      marker.setZIndexOffset(id === selectedId ? 500 : 0);
     }
     lastSelectedIdRef.current = selectedId;
-  }, [selectedId, mapReady]);
+  }, [selectedId, mapReady, active]);
 
   useEffect(() => {
     const map = mapRef.current;
     const userLayer = userLayerRef.current;
     const leaflet = leafletRef.current;
-    if (!mapReady || !map || !userLayer || !leaflet || !userLocation) return;
+    if (!active || !mapReady || !map || !userLayer || !leaflet || !userLocation) return;
+    if (lastLocationRef.current === userLocation) return;
+    lastLocationRef.current = userLocation;
 
     userLayer.clearLayers();
     leaflet
@@ -192,6 +262,8 @@ export function StationMap({ stations, selectedId, userLocation, onSelectStation
       .bindTooltip("目前位置")
       .addTo(userLayer);
 
+    // Hidden maps may have been resized. Re-measure before computing the new view.
+    map.invalidateSize({ pan: false });
     const nextZoom = Math.max(map.getZoom(), 14);
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reducedMotion) {
@@ -199,7 +271,7 @@ export function StationMap({ stations, selectedId, userLocation, onSelectStation
     } else {
       map.flyTo([userLocation.lat, userLocation.lng], nextZoom, { duration: 0.7 });
     }
-  }, [userLocation, mapReady]);
+  }, [userLocation, mapReady, active]);
 
   return (
     <div className="map-canvas-wrap">

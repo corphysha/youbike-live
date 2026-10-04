@@ -1,112 +1,24 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { createReadStream, existsSync, statSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
-import { extname, resolve } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { startBrowserAudit } from "./browser-audit.mjs";
 
-let targetUrl = process.env.TARGET_URL;
-let localServer;
-const port = Number(process.env.CDP_PORT ?? 9333);
-if (!targetUrl) {
-  const outputRoot = resolve(process.cwd(), "dist/pages-site");
-  const contentTypes = {
-    ".css": "text/css; charset=utf-8",
-    ".html": "text/html; charset=utf-8",
-    ".js": "text/javascript; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
-    ".svg": "image/svg+xml",
-  };
-  localServer = createServer((request, response) => {
-    const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
-    const relativePath = pathname === "/" ? "index.html" : pathname.slice(1);
-    const filePath = resolve(outputRoot, relativePath);
-    if (
-      !filePath.startsWith(`${outputRoot}/`) ||
-      !existsSync(filePath) ||
-      !statSync(filePath).isFile()
-    ) {
-      response.writeHead(404).end("Not found");
-      return;
-    }
-    response.setHeader(
-      "Content-Type",
-      contentTypes[extname(filePath)] ?? "application/octet-stream",
-    );
-    createReadStream(filePath).pipe(response);
-  });
-  await new Promise((resolveListen, rejectListen) => {
-    localServer.once("error", rejectListen);
-    localServer.listen(4180, "127.0.0.1", resolveListen);
-  });
-  targetUrl = "http://127.0.0.1:4180/";
-}
-const profile = `/home/openclaw/.hermes/cache/scratch/youbike-audit-${process.pid}`;
-const chrome = spawn(
-  process.env.CHROME_BIN ?? "/usr/bin/google-chrome",
-  [
-    "--headless=new",
-    "--no-sandbox",
-    "--disable-gpu",
-    "--hide-scrollbars",
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${profile}`,
-    "about:blank",
-  ],
-  { stdio: "ignore" },
-);
-
-let socket;
+const { cdp, evaluate, targetUrl, close } = await startBrowserAudit();
 try {
-  let version;
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    try {
-      version = await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.json());
-      break;
-    } catch {
-      await delay(100);
-    }
+  if (process.env.STATION_FEED_PATH) {
+    const feed = readFileSync(process.env.STATION_FEED_PATH, "utf8");
+    await cdp("Page.addScriptToEvaluateOnNewDocument", {
+      source: `
+      const originalFetch = window.fetch;
+      window.fetch = (url, options) => String(url).includes("station-yb2.json")
+        ? Promise.resolve(Response.json(${feed}))
+        : String(url).includes("area-all.json")
+          ? Promise.resolve(Response.json([]))
+          : originalFetch(url, options);
+    `,
+    });
   }
-  assert.ok(version, "Chrome DevTools did not start");
-
-  const target = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, {
-    method: "PUT",
-  }).then((r) => r.json());
-  socket = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => {
-    socket.addEventListener("open", resolve, { once: true });
-    socket.addEventListener("error", reject, { once: true });
-  });
-
-  let nextId = 0;
-  const pending = new Map();
-  socket.addEventListener("message", (event) => {
-    const message = JSON.parse(event.data);
-    if (!message.id) return;
-    const request = pending.get(message.id);
-    if (!request) return;
-    pending.delete(message.id);
-    if (message.error) request.reject(new Error(message.error.message));
-    else request.resolve(message.result);
-  });
-  const cdp = (method, params = {}) =>
-    new Promise((resolve, reject) => {
-      const id = ++nextId;
-      pending.set(id, { resolve, reject });
-      socket.send(JSON.stringify({ id, method, params }));
-    });
-  const evaluate = async (expression) => {
-    const result = await cdp("Runtime.evaluate", {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-    });
-    if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
-    return result.result.value;
-  };
-
-  await cdp("Page.enable");
-  await cdp("Runtime.enable");
   await cdp("Emulation.setDeviceMetricsOverride", {
     width: 320,
     height: 844,
@@ -149,7 +61,7 @@ try {
       const header = document.querySelector(".masthead-inner");
       const card = document.querySelector(".station-card");
       const map = document.querySelector(".map-canvas");
-      const locateButton = document.querySelector(".locate-btn");
+      const locateButton = document.querySelector(".map-section .locate-btn:not(.map-toggle)");
       return {
         width: innerWidth,
         documentWidth: document.documentElement.scrollWidth,
@@ -414,7 +326,5 @@ try {
   );
   console.log("Responsive and theme audit passed.");
 } finally {
-  socket?.close();
-  chrome.kill("SIGTERM");
-  localServer?.close();
+  close();
 }

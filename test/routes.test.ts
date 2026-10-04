@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { buildRouteMessage, routeId, toggleRoute } from "../src/lib/routes";
+import { buildRouteMessage } from "../src/lib/notification-messages";
+import { routeId, toggleRoute } from "../src/lib/routes";
 import type { StationView } from "../src/lib/schema";
 
 function station(id: string, overrides: Partial<StationView> = {}): StationView {

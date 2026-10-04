@@ -14,28 +14,56 @@ export function useStationFeed() {
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [now, setNow] = useState(() => new Date());
 
-  const inFlight = useRef(false);
+  const inFlight = useRef<AbortController | null>(null);
+
+  const areaInFlight = useRef<AbortController | null>(null);
+  const areasLoaded = useRef(false);
+  const loadAreas = useCallback(async () => {
+    if (areasLoaded.current || areaInFlight.current) return;
+    const controller = new AbortController();
+    areaInFlight.current = controller;
+    try {
+      const nextAreas = await fetchAreas(controller.signal);
+      if (controller.signal.aborted) return;
+      if (nextAreas.length > 0) {
+        areasLoaded.current = true;
+        setAreas(nextAreas);
+      }
+    } finally {
+      if (areaInFlight.current === controller) areaInFlight.current = null;
+    }
+  }, []);
 
   const load = useCallback(async () => {
     if (inFlight.current) return;
-    inFlight.current = true;
+    const controller = new AbortController();
+    inFlight.current = controller;
+    // Retry missing area metadata independently; never hold up the live feed.
+    void loadAreas();
     try {
-      const [s, a] = await Promise.all([fetchStations(), fetchAreas()]);
+      const s = await fetchStations(controller.signal);
+      if (controller.signal.aborted) return;
       setStations(s);
-      setAreas(a);
       setLastFetch(new Date());
       setState("ready");
       setErrorMsg("");
     } catch (err) {
+      if (controller.signal.aborted) return;
       setErrorMsg(err instanceof FeedError ? err.message : "載入失敗，請稍後再試");
       setState((prev) => (prev === "ready" ? "ready" : "error"));
     } finally {
-      inFlight.current = false;
+      if (inFlight.current === controller) inFlight.current = null;
     }
-  }, []);
+  }, [loadAreas]);
 
   useEffect(() => {
     void load();
+    return () => {
+      inFlight.current?.abort();
+      inFlight.current = null;
+      areaInFlight.current?.abort();
+      areaInFlight.current = null;
+    };
   }, [load]);
 
   // refresh while visible
