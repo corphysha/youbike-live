@@ -18,7 +18,7 @@
 ## 技術
 
 - vinext（Cloudflare 的 Next.js API on Vite）靜態匯出
-- Bun 1.3 + TypeScript strict + Biome 2.5 + Zod 4
+- Bun 1.4.2 + TypeScript strict + Biome 2.5 + Zod 4
 - React 19 + Phosphor Icons
 - Leaflet + MarkerCluster（OpenStreetMap 底圖）
 - 定位後依 Haversine 直線距離排序
@@ -47,3 +47,9 @@ bun run audit:responsive
 
 全域與 Leaflet CSS 統一由 `src/pages/_app.tsx` 載入；瀏覽器 API 在 effect 或事件處理中使用，
 讓 vinext 靜態匯出與 Next.js Pages Router 的伺服器渲染保持相容。
+
+## CI 與部署
+
+PR（目標分支為 `main`）和 `main` 的每次 push 都會執行 lint、型別檢查、單元測試與生產建置。CI 使用最新穩定版 Bun，所有 GitHub Actions 均使用最新 major 版本標籤。
+
+`main` push 通過檢查後，會自動部署 `dist/pages-site` 至 GitHub Pages。也可在 Actions 手動執行工作流程；只有 `main` 會部署，PR 和其他分支只執行檢查。
