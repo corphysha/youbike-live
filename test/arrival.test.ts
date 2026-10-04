@@ -87,6 +87,10 @@ test("messages report bikes and docks, with an alternative when the trip station
   expect(message.title).toBe("已到達終點：站點 F");
   expect(message.body).toStartWith("空位 0 格 · 可借 10 輛。附近「站點 N」空位 3 格");
 
+  expect(buildArrivalMessage({ station: home, role: "start" }, [], { arrived: false }).title).toBe(
+    "起點：站點 H",
+  );
+
   expect(buildArrivalMessage({ station: station("C", { status: 0 }), role: "start" }).body).toBe(
     "此站暫停營運，請改用附近站點。",
   );

@@ -36,7 +36,10 @@ function persistEnabled(enabled: boolean) {
   }
 }
 
-/** Prefer the service worker so notifications also work on Android, where `new Notification` throws. */
+/**
+ * Hand the message to the OS notification center (Windows/macOS/Android/iOS).
+ * Prefer the service worker so it also works on Android, where `new Notification` throws.
+ */
 async function showSystemNotification({ title, body }: ArrivalMessage, tag: string) {
   const options: NotificationOptions = {
     body,
@@ -49,16 +52,26 @@ async function showSystemNotification({ title, body }: ArrivalMessage, tag: stri
     const registration = await navigator.serviceWorker?.getRegistration();
     if (registration) {
       await registration.showNotification(title, options);
-      return;
+      return true;
     }
   } catch {
     // fall back to the page-level API below
   }
   try {
     new Notification(title, options);
+    return true;
   } catch {
     // the in-page record still shows the alert
+    return false;
   }
+}
+
+/** Trip stations first: they are the ones a test notification is most useful for. */
+const TEST_ROLE_ORDER: Record<ArrivalTarget["role"], number> = { start: 0, end: 1, favorite: 2 };
+
+async function requestNotificationPermission(): Promise<AlertPermission> {
+  if (!("Notification" in window)) return "unsupported";
+  return Notification.permission === "granted" ? "granted" : Notification.requestPermission();
 }
 
 /**
@@ -70,6 +83,7 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
   const [permission, setPermission] = useState<AlertPermission>("default");
   const [watchError, setWatchError] = useState("");
   const [lastAlert, setLastAlert] = useState<ArrivalAlertRecord | null>(null);
+  const [testStatus, setTestStatus] = useState("");
 
   const targets = useMemo(
     () => collectArrivalTargets(stations, favorites, trip),
@@ -99,7 +113,8 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
     }
   }, []);
 
-  const notifyArrivals = useCallback(async (arrivals: ArrivalTarget[]) => {
+  /** Returns how many notifications the OS accepted. */
+  const notifyArrivals = useCallback(async (arrivals: ArrivalTarget[], arrived = true) => {
     // A hidden page pauses feed refreshes, so fetch the latest counts before reporting them.
     let latest = stationsRef.current;
     try {
@@ -108,12 +123,14 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
       // report the last known counts instead
     }
     const byId = new Map(latest.map((station) => [station.id, station]));
+    let shown = 0;
     for (const arrival of arrivals) {
       const station = byId.get(arrival.station.id) ?? arrival.station;
-      const message = buildArrivalMessage({ ...arrival, station }, latest);
+      const message = buildArrivalMessage({ ...arrival, station }, latest, { arrived });
       setLastAlert({ ...message, at: new Date() });
-      await showSystemNotification(message, station.id);
+      if (await showSystemNotification(message, station.id)) shown += 1;
     }
+    return shown;
   }, []);
 
   useEffect(() => {
@@ -153,6 +170,40 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
     persistEnabled(true);
   }, []);
 
+  /**
+   * Send the current counts of the trip stations (or first favorite) as an OS notification right
+   * away, without waiting for a location change — desktops never "arrive" anywhere.
+   */
+  const sendTestAlert = useCallback(async () => {
+    const result = await requestNotificationPermission();
+    setPermission(result);
+    if (result !== "granted") {
+      setTestStatus(result === "denied" ? "通知權限被拒絕，無法傳送。" : "");
+      return;
+    }
+    const picks = [...targetsRef.current]
+      .sort((a, b) => TEST_ROLE_ORDER[a.role] - TEST_ROLE_ORDER[b.role])
+      .filter((target, index) => target.role !== "favorite" || index === 0);
+    setTestStatus("傳送中…");
+    const shown =
+      picks.length > 0
+        ? await notifyArrivals(picks, false)
+        : Number(
+            await showSystemNotification(
+              {
+                title: "YouBike 即時查詢通知已啟用",
+                body: "加入最愛站點或設定起終點後，通知會顯示可借車輛與剩餘空位。",
+              },
+              "test",
+            ),
+          );
+    setTestStatus(
+      shown > 0
+        ? `已送出 ${shown} 則系統通知。沒看到的話，請檢查作業系統的通知設定是否允許此瀏覽器、以及是否開啟勿擾模式。`
+        : "瀏覽器無法顯示系統通知。",
+    );
+  }, [notifyArrivals]);
+
   const disableAlerts = useCallback(() => {
     setEnabled(false);
     setWatchError("");
@@ -165,7 +216,9 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
     alertTargetCount: targets.length,
     alertWatchError: watchError,
     lastAlert,
+    testStatus,
     enableAlerts,
+    sendTestAlert,
     disableAlerts,
   };
 }

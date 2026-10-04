@@ -74,10 +74,17 @@ export function detectArrivals(
   return { arrivals, state: { inside, lastAlertAt } };
 }
 
-const ROLE_LABEL: Record<ArrivalRole, string> = {
+const ARRIVED_LABEL: Record<ArrivalRole, string> = {
   favorite: "已到達最愛站點",
   start: "已到達起點",
   end: "已到達終點",
+};
+
+/** Used when the user asks for the current status without having arrived. */
+const STATUS_LABEL: Record<ArrivalRole, string> = {
+  favorite: "最愛站點",
+  start: "起點",
+  end: "終點",
 };
 
 export interface ArrivalMessage {
@@ -88,8 +95,9 @@ export interface ArrivalMessage {
 export function buildArrivalMessage(
   { station, role }: ArrivalTarget,
   stations: StationView[] = [],
+  { arrived = true } = {},
 ): ArrivalMessage {
-  const title = `${ROLE_LABEL[role]}：${station.name}`;
+  const title = `${(arrived ? ARRIVED_LABEL : STATUS_LABEL)[role]}：${station.name}`;
   if (station.status !== 1) return { title, body: "此站暫停營運，請改用附近站點。" };
 
   const bikes = `可借 ${station.available} 輛`;

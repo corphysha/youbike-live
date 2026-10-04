@@ -77,8 +77,10 @@ export default function Home() {
                 targetCount={alerts.alertTargetCount}
                 watchError={alerts.alertWatchError}
                 lastAlert={alerts.lastAlert}
+                testStatus={alerts.testStatus}
                 onEnable={alerts.enableAlerts}
                 onDisable={alerts.disableAlerts}
+                onSendTest={alerts.sendTestAlert}
               />
             </div>
 

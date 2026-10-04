@@ -1,4 +1,4 @@
-import { Bell, BellSlash } from "@phosphor-icons/react";
+import { Bell, BellRinging, BellSlash } from "@phosphor-icons/react";
 import type { AlertPermission, ArrivalAlertRecord } from "../../hooks/useArrivalAlerts";
 import { ARRIVAL_RADIUS_METERS } from "../../lib/arrival";
 import { pad } from "../../lib/format";
@@ -9,8 +9,10 @@ interface Props {
   targetCount: number;
   watchError: string;
   lastAlert: ArrivalAlertRecord | null;
+  testStatus: string;
   onEnable: () => Promise<void>;
   onDisable: () => void;
+  onSendTest: () => Promise<void>;
 }
 
 function statusText({ enabled, permission, targetCount }: Props): string {
@@ -24,7 +26,16 @@ function statusText({ enabled, permission, targetCount }: Props): string {
 }
 
 export function ArrivalAlerts(props: Props) {
-  const { enabled, permission, watchError, lastAlert, onEnable, onDisable } = props;
+  const {
+    enabled,
+    permission,
+    watchError,
+    lastAlert,
+    testStatus,
+    onEnable,
+    onDisable,
+    onSendTest,
+  } = props;
   const blocked = permission === "unsupported" || permission === "denied";
 
   return (
@@ -49,12 +60,27 @@ export function ArrivalAlerts(props: Props) {
             )}
             <span>{enabled ? "關閉提醒" : "開啟提醒"}</span>
           </button>
+          <button
+            type="button"
+            className="locate-btn"
+            disabled={blocked}
+            onClick={() => void onSendTest()}
+            title="立即以作業系統通知傳送起終點或最愛站點的車輛與空位"
+          >
+            <BellRinging size={16} weight="bold" aria-hidden="true" />
+            <span>立即通知</span>
+          </button>
         </div>
       </div>
       <p className={`panel-note${blocked ? " warn" : ""}`} role="status" aria-live="polite">
         {statusText(props)}
       </p>
       {enabled && watchError && <p className="panel-note warn">{watchError}</p>}
+      {testStatus && (
+        <p className="panel-note" aria-live="polite">
+          {testStatus}
+        </p>
+      )}
       {lastAlert && (
         <div className="alert-record">
           <span className="muted">

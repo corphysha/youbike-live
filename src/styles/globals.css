@@ -1199,6 +1199,7 @@ a {
 
 .panel-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
@@ -1206,6 +1207,7 @@ a {
 }
 
 .panel-heading-copy {
+  flex: 1 1 220px;
   min-width: 0;
 }
 
@@ -1454,7 +1456,6 @@ a {
   }
 
   .panel-heading {
-    flex-wrap: wrap;
     padding: 13px 12px 10px;
   }
 
