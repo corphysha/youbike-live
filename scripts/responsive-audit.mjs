@@ -61,7 +61,7 @@ try {
       const header = document.querySelector(".masthead-inner");
       const card = document.querySelector(".station-card");
       const map = document.querySelector(".map-canvas");
-      const locateButton = document.querySelector(".locate-btn");
+      const locateButton = document.querySelector(".map-section .locate-btn:not(.map-toggle)");
       return {
         width: innerWidth,
         documentWidth: document.documentElement.scrollWidth,

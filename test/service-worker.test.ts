@@ -3,7 +3,7 @@ import { runInNewContext } from "node:vm";
 
 const source = await Bun.file(new URL("../public/sw.js", import.meta.url)).text();
 
-function harness() {
+function harness(scope: string) {
   let handler: (event: unknown) => void;
   let requests = 0;
   let offline = false;
@@ -15,7 +15,7 @@ function harness() {
     Response,
     self: {
       location: { origin: "https://example.com" },
-      registration: { scope: "https://example.com/youbike-live/" },
+      registration: { scope },
       addEventListener: (type: string, listener: typeof handler) => {
         if (type === "fetch") handler = listener;
       },
@@ -51,22 +51,27 @@ function harness() {
   };
 }
 
-test("hashed assets are cache-first and a new build hash downloads new content", async () => {
-  const app = harness();
-  const asset = "https://example.com/youbike-live/_next/static/chunks/app-abc123.js";
+const scopes = ["https://example.com/", "https://example.com/youbike-live/"];
+
+test.each(scopes)("hashed assets are cache-first and build hashes update at %s", async (scope) => {
+  const app = harness(scope);
+  const asset = `${scope}_next/static/chunks/app-abc123.js`;
   expect(await (await app.request(asset))?.text()).toBe("network 1");
   expect(await (await app.request(asset))?.text()).toBe("network 1");
   expect(app.requests()).toBe(1);
   expect(await (await app.request(asset.replace("abc123", "def456")))?.text()).toBe("network 2");
 });
 
-test("HTML stays network-first with an offline fallback; external feeds bypass the cache", async () => {
-  const app = harness();
-  const page = "https://example.com/youbike-live/";
-  expect(await (await app.request(page, "navigate"))?.text()).toBe("network 1");
-  expect(await (await app.request(page, "navigate"))?.text()).toBe("network 2");
-  app.setOffline();
-  expect(await (await app.request(page, "navigate"))?.text()).toBe("network 2");
-  expect(app.request("https://apis.youbike.com.tw/json/station-yb2.json")).toBeUndefined();
-  expect(app.requests()).toBe(3);
-});
+test.each(scopes)(
+  "HTML stays fresh/offline and external feeds bypass the cache at %s",
+  async (scope) => {
+    const app = harness(scope);
+    const page = scope;
+    expect(await (await app.request(page, "navigate"))?.text()).toBe("network 1");
+    expect(await (await app.request(page, "navigate"))?.text()).toBe("network 2");
+    app.setOffline();
+    expect(await (await app.request(page, "navigate"))?.text()).toBe("network 2");
+    expect(app.request("https://apis.youbike.com.tw/json/station-yb2.json")).toBeUndefined();
+    expect(app.requests()).toBe(3);
+  },
+);

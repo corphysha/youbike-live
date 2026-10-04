@@ -36,3 +36,20 @@ test("station list cards expose an accessible map navigation action", () => {
   expect(markup).toContain('aria-label="開啟前往 台北車站 的步行導航"');
   expect(markup).toContain("導航");
 });
+
+test("station cards offer start and end trip actions when enabled", () => {
+  const markup = renderToStaticMarkup(
+    <StationCard
+      station={station}
+      isFav={false}
+      now={new Date("2026-10-03T12:01:00Z")}
+      onToggleFav={() => {}}
+      onNavigateToStation={() => {}}
+      tripRole="start"
+      onToggleTripStation={() => {}}
+    />,
+  );
+
+  expect(markup).toContain('aria-label="取消起點：台北車站"');
+  expect(markup).toContain('aria-label="設為終點：台北車站"');
+});

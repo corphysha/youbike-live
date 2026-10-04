@@ -2,6 +2,7 @@ import { Lightning, NavigationArrow, Star } from "@phosphor-icons/react";
 import { formatDistance } from "../lib/distance";
 import { ageMinutes, availabilityLevel, LEVEL_LABEL, shortTime } from "../lib/format";
 import type { StationView } from "../lib/schema";
+import { TripButtons } from "./TripButtons";
 
 interface Props {
   station: StationView;
@@ -10,6 +11,8 @@ interface Props {
   distanceMeters?: number;
   onToggleFav: (id: string) => void;
   onNavigateToStation: (station: StationView) => void;
+  tripRole?: "start" | "end" | null;
+  onToggleTripStation?: (role: "start" | "end", id: string) => void;
 }
 
 export function StationCard({
@@ -19,6 +22,8 @@ export function StationCard({
   distanceMeters,
   onToggleFav,
   onNavigateToStation,
+  tripRole = null,
+  onToggleTripStation,
 }: Props) {
   const level = availabilityLevel(station.available, station.empty, station.status);
   const age = ageMinutes(station.updatedAt, now);
@@ -99,6 +104,14 @@ export function StationCard({
           </span>
         )}
       </div>
+      {onToggleTripStation && (
+        <TripButtons
+          stationId={station.id}
+          stationName={station.name}
+          tripRole={tripRole}
+          onToggleTripStation={onToggleTripStation}
+        />
+      )}
     </li>
   );
 }

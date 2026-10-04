@@ -105,6 +105,7 @@ try {
     cpuSlowdown: 4,
     note: "Lab diagnostics with local assets and a 300ms fixture response; not field Core Web Vitals or an INP percentile.",
   });
+  console.log(JSON.stringify(report, null, 2));
   assert.deepEqual(errors, []);
   assert.ok(report.workerMessages >= 2, "both feeds must be parsed in the worker");
   assert.ok(
@@ -119,7 +120,6 @@ try {
     ),
     "worker path must not load the main-thread parser",
   );
-  console.log(JSON.stringify(report, null, 2));
   if (process.env.REPORT_PATH)
     writeFileSync(process.env.REPORT_PATH, JSON.stringify(report, null, 2));
 } finally {

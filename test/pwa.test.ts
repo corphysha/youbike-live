@@ -2,12 +2,12 @@ import { expect, test } from "bun:test";
 
 const manifestUrl = new URL("../public/manifest.webmanifest", import.meta.url);
 
-test("PWA manifest targets the GitHub Pages project scope", async () => {
+test("PWA manifest targets the site root scope", async () => {
   const manifest = await Bun.file(manifestUrl).json();
 
   expect(manifest.name).toBe("YouBike 即時查詢");
-  expect(manifest.start_url).toBe("/youbike-live/");
-  expect(manifest.scope).toBe("/youbike-live/");
+  expect(manifest.start_url).toBe("/");
+  expect(manifest.scope).toBe("/");
   expect(manifest.display).toBe("standalone");
   expect(manifest.theme_color).toBe("#f7f6f2");
 });
@@ -20,10 +20,7 @@ test("manifest includes installable raster icons for common PWA sizes", async ()
     const icon = icons.find((entry) => entry.sizes === size && entry.type === "image/png");
     expect(icon).toBeDefined();
     if (icon) {
-      const iconUrl = new URL(
-        `../public/${icon.src.replace("/youbike-live/", "")}`,
-        import.meta.url,
-      );
+      const iconUrl = new URL(`../public/${icon.src.replace(/^\//, "")}`, import.meta.url);
       expect(await Bun.file(iconUrl).exists()).toBe(true);
     }
   }
@@ -37,4 +34,11 @@ test("service worker provides an offline navigation fallback and preserves netwo
   expect(source).toContain('request.mode === "navigate"');
   expect(source).toContain("offline.html");
   expect(source).toContain("fetch(request)");
+});
+
+test("service worker opens or focuses the app when an arrival notification is tapped", async () => {
+  const source = await Bun.file(new URL("../public/sw.js", import.meta.url)).text();
+
+  expect(source).toContain('addEventListener("notificationclick"');
+  expect(source).toContain("openWindow");
 });

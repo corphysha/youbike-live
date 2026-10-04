@@ -1,14 +1,19 @@
 import Head from "next/head";
+import { ArrivalAlerts } from "../components/home/ArrivalAlerts";
 import { FeedStatus } from "../components/home/FeedStatus";
 import { PageFooter } from "../components/home/PageFooter";
 import { PageHeader } from "../components/home/PageHeader";
 import { StationFilters } from "../components/home/StationFilters";
 import { StationMapSection } from "../components/home/StationMapSection";
 import { StationResults } from "../components/home/StationResults";
+import { TripPlanner } from "../components/home/TripPlanner";
+import { useArrivalAlerts } from "../hooks/useArrivalAlerts";
 import { useFavorites } from "../hooks/useFavorites";
 import { useMapCollapse } from "../hooks/useMapCollapse";
+import { useSavedRoutes } from "../hooks/useSavedRoutes";
 import { useStationFeed } from "../hooks/useStationFeed";
 import { useStationSearch } from "../hooks/useStationSearch";
+import { useTrip } from "../hooks/useTrip";
 import { useUserLocation } from "../hooks/useUserLocation";
 
 export default function Home() {
@@ -16,6 +21,9 @@ export default function Home() {
   const { favorites, onToggleFavorite, onClearFavorites } = useFavorites();
   const { mapCollapsed, toggleMap } = useMapCollapse();
   const { userLocation, locationStatus, locationMessage, requestLocation } = useUserLocation();
+  const { trip, toggleTripStation, swapTrip, applyTrip, clearTrip } = useTrip();
+  const { routes, onToggleRoute, onRemoveRoute } = useSavedRoutes();
+  const alerts = useArrivalAlerts({ stations, favorites, trip });
   const search = useStationSearch({ stations, areas, favorites, userLocation });
 
   const clearFavorites = () => {
@@ -63,9 +71,38 @@ export default function Home() {
 
         {state === "ready" && (
           <>
+            <div className="panel-grid">
+              <TripPlanner
+                trip={trip}
+                stations={stations}
+                routes={routes}
+                routeStatus={alerts.routeStatus}
+                onSwap={swapTrip}
+                onClear={clearTrip}
+                onToggleRoute={onToggleRoute}
+                onRemoveRoute={onRemoveRoute}
+                onUseRoute={(route) => {
+                  applyTrip({ startId: route.startId, endId: route.endId });
+                  void alerts.sendRouteAlert(route);
+                }}
+              />
+              <ArrivalAlerts
+                enabled={alerts.alertsEnabled}
+                permission={alerts.alertPermission}
+                targetCount={alerts.alertTargetCount}
+                watchError={alerts.alertWatchError}
+                lastAlert={alerts.lastAlert}
+                testStatus={alerts.testStatus}
+                onEnable={alerts.enableAlerts}
+                onDisable={alerts.disableAlerts}
+                onSendTest={alerts.sendTestAlert}
+              />
+            </div>
+
             <StationMapSection
               stations={search.filtered}
               favorites={favorites}
+              trip={trip}
               userLocation={userLocation}
               locationStatus={locationStatus}
               locationMessage={locationMessage}
@@ -73,6 +110,7 @@ export default function Home() {
               onRequestLocation={requestLocation}
               onToggleMap={toggleMap}
               onToggleFavorite={onToggleFavorite}
+              onToggleTripStation={toggleTripStation}
             />
 
             <StationResults
@@ -82,9 +120,11 @@ export default function Home() {
               totalEmpty={search.totalEmpty}
               remainingCount={search.remainingCount}
               favorites={favorites}
+              trip={trip}
               now={now}
               userLocation={userLocation}
               onToggleFavorite={onToggleFavorite}
+              onToggleTripStation={toggleTripStation}
               onLoadMore={search.loadMore}
             />
           </>

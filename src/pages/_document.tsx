@@ -10,9 +10,9 @@ export default function Document() {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="YouBike 即時" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <link rel="manifest" href="/youbike-live/manifest.webmanifest" />
-        <link rel="apple-touch-icon" href="/youbike-live/icons/apple-touch-icon.png" />
-        <script src="/youbike-live/theme-init.js" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        <script src="/theme-init.js" />
         <link
           rel="icon"
           href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ffd400'/%3E%3Ccircle cx='10' cy='21' r='5' fill='none' stroke='%23231f20' stroke-width='2.4'/%3E%3Ccircle cx='23' cy='21' r='5' fill='none' stroke='%23231f20' stroke-width='2.4'/%3E%3Cpath d='M10 21l4-8h5l3 8' fill='none' stroke='%23231f20' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M14 13l-2-3h-3' fill='none' stroke='%23231f20' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E"

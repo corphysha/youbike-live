@@ -2,6 +2,7 @@ import { MagnifyingGlass } from "@phosphor-icons/react";
 import { type GeoPoint, getDistanceMeters } from "../../lib/distance";
 import { navigateToStation } from "../../lib/navigation";
 import type { StationView } from "../../lib/schema";
+import { getTripRole, type Trip } from "../../lib/trip";
 import { StationCard } from "../StationCard";
 
 interface Props {
@@ -11,9 +12,11 @@ interface Props {
   totalEmpty: number;
   remainingCount: number;
   favorites: string[];
+  trip: Trip;
   now: Date;
   userLocation: GeoPoint | null;
   onToggleFavorite: (id: string) => void;
+  onToggleTripStation: (role: "start" | "end", id: string) => void;
   onLoadMore: () => void;
 }
 
@@ -24,9 +27,11 @@ export function StationResults({
   totalEmpty,
   remainingCount,
   favorites,
+  trip,
   now,
   userLocation,
   onToggleFavorite,
+  onToggleTripStation,
   onLoadMore,
 }: Props) {
   return (
@@ -55,6 +60,8 @@ export function StationResults({
               distanceMeters={userLocation ? getDistanceMeters(userLocation, s) : undefined}
               onToggleFav={onToggleFavorite}
               onNavigateToStation={navigateToStation}
+              tripRole={getTripRole(trip, s.id)}
+              onToggleTripStation={onToggleTripStation}
             />
           ))}
         </ul>

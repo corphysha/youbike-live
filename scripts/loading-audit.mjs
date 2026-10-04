@@ -36,6 +36,20 @@ try {
       delete AbortSignal.timeout;
       delete AbortSignal.prototype.throwIfAborted;
     }
+    if (location.search.includes("notification-check")) {
+      audit.notifications = [];
+      localStorage.setItem("youbike-live:trip", JSON.stringify({ startId: "0", endId: "1" }));
+      localStorage.setItem("youbike-live:routes", JSON.stringify([{ id: "0>1", startId: "0", endId: "1" }]));
+      localStorage.removeItem("youbike-live:arrival-alerts");
+      window.Notification = class {
+        static permission = "granted";
+        static async requestPermission() { return "granted"; }
+        constructor(title, options) { audit.notifications.push({ title, ...options }); }
+      };
+      navigator.serviceWorker.getRegistration = async () => ({
+        showNotification: async (title, options) => { audit.notifications.push({ title, ...options }); }
+      });
+    }
     audit.areaFail = location.search.includes("area-retry");
     const originalInterval = window.setInterval;
     window.setInterval = (callback, ms, ...args) => {
@@ -205,13 +219,25 @@ try {
     selection,
   );
 
+  // Preserve main's new trip actions when selected-station details stay mounted.
+  await evaluate('document.querySelector(".selected-station .trip-btn").click()');
+  await waitFor(
+    'document.querySelector(".trip-leg h3")?.textContent === document.querySelector(".selected-station h3")?.textContent',
+  );
+  assert.equal(
+    await evaluate(
+      'document.querySelector(".selected-station .trip-btn").getAttribute("aria-pressed")',
+    ),
+    "true",
+  );
+
   // Resize and relocate while hidden; both instant and animated recentering must use the new size.
   for (const [width, motion] of [
     [390, "reduce"],
     [1024, "no-preference"],
   ]) {
     await evaluate(
-      'document.querySelector(".map-toggle").click(); audit.lat += 0.03; audit.lng += 0.01; document.querySelector(".locate-btn").click()',
+      'document.querySelector(".map-toggle").click(); audit.lat += 0.03; audit.lng += 0.01; document.querySelector(".map-section .locate-btn:not(.map-toggle)").click()',
     );
     await waitFor('document.querySelectorAll(".station-list .station-card").length === 10');
     await cdp("Emulation.setDeviceMetricsOverride", {
@@ -352,10 +378,47 @@ try {
     2,
     "successful metadata must stay cached in memory",
   );
+  // Notification delivery uses fresh counts and lazy message code, including on older browsers.
+  await cdp("Page.navigate", { url: `${targetUrl}?notification-check&legacy-abort` });
+  await waitFor('document.querySelectorAll(".station-list .station-card").length === 10');
+  await evaluate(
+    'audit.available = 8; document.querySelector("[aria-labelledby=alerts-title] .locate-btn[title]").click()',
+  );
+  await waitFor("audit.notifications.length === 2");
+  assert.ok(await evaluate('audit.notifications.every(message => message.body.includes("8"))'));
+  assert.ok(
+    await evaluate(
+      "audit.notifications.every(message => message.renotify && message.requireInteraction)",
+    ),
+    "trip alerts preserve re-alerting and persistent notification options",
+  );
+  await evaluate('audit.available = 9; document.querySelector(".saved-routes .route-btn").click()');
+  await waitFor("audit.notifications.length === 3");
+  assert.ok(
+    await evaluate(
+      'audit.notifications[2].title.startsWith("路線") && audit.notifications[2].body.includes("9")',
+    ),
+  );
+  assert.ok(
+    await evaluate(
+      "performance.getEntriesByType('resource').some(r => r.name.includes('notification-messages-'))",
+    ),
+  );
   assert.deepEqual(errors, [], "browser runtime errors");
   console.log(
     "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, retained map/tiles/view/selection, refresh, location, cancellation, failure recovery.",
   );
+} catch (error) {
+  console.error(
+    "Loading audit diagnostics:",
+    await evaluate(`({
+    url: location.href, cards: document.querySelectorAll('.station-list .station-card').length,
+    stationRequests: window.audit?.stationRequests, areaRequests: window.audit?.areaRequests,
+    text: document.body.innerText.slice(0, 1200)
+  })`),
+    errors,
+  );
+  throw error;
 } finally {
   close();
 }

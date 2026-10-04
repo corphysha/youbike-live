@@ -81,3 +81,17 @@ self.addEventListener("fetch", (event) => {
     })(),
   );
 });
+
+// Arrival alerts: tapping a notification focuses an open app window, or opens one.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = scopeUrl("");
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const existing = windows.find((client) => client.url.startsWith(targetUrl));
+      if (existing) return existing.focus();
+      return self.clients.openWindow(targetUrl);
+    })(),
+  );
+});
