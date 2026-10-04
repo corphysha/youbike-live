@@ -3,6 +3,7 @@ import {
   ALERT_COOLDOWN_MS,
   buildArrivalMessage,
   collectArrivalTargets,
+  createArrivalMonitor,
   detectArrivals,
   INITIAL_ARRIVAL_STATE,
 } from "../src/lib/arrival";
@@ -94,4 +95,46 @@ test("messages report bikes and docks, with an alternative when the trip station
   expect(buildArrivalMessage({ station: station("C", { status: 0 }), role: "start" }).body).toBe(
     "此站暫停營運，請改用附近站點。",
   );
+});
+
+test("monitor re-checks the last fix when targets load after it", () => {
+  let targets: { station: StationView; role: "favorite" }[] = [];
+  const delivered: string[] = [];
+  const monitor = createArrivalMonitor(
+    () => targets,
+    (arrivals) => delivered.push(...arrivals.map((a) => a.station.id)),
+    () => 0,
+  );
+
+  monitor.update(atStation);
+  expect(delivered).toEqual([]);
+
+  targets = [{ station: home, role: "favorite" }];
+  monitor.recheck();
+  expect(delivered).toEqual(["H"]);
+
+  // later target refreshes keep the enter state, so no duplicate alert
+  monitor.recheck();
+  expect(delivered).toEqual(["H"]);
+});
+
+test("stopping the monitor marks pending deliveries inactive and ignores later fixes", () => {
+  const targets = [{ station: home, role: "favorite" as const }];
+  const pending: (() => boolean)[] = [];
+  const monitor = createArrivalMonitor(
+    () => targets,
+    (_arrivals, isActive) => pending.push(isActive),
+    () => 0,
+  );
+
+  monitor.update(atStation);
+  expect(pending).toHaveLength(1);
+  expect(pending[0]?.()).toBe(true);
+
+  monitor.stop();
+  expect(pending[0]?.()).toBe(false);
+  monitor.update(farAway);
+  monitor.update(atStation);
+  monitor.recheck();
+  expect(pending).toHaveLength(1);
 });

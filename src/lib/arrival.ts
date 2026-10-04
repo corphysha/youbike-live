@@ -114,3 +114,46 @@ export function buildArrivalMessage(
     : "500 公尺內沒有其他可用站點";
   return { title, body: `${counts}。${hint}` };
 }
+
+export interface ArrivalMonitor {
+  /** Record a new position fix and check it against the current targets. */
+  update: (location: GeoPoint) => void;
+  /** Re-check the last fix, e.g. after the feed loads or a target is added. */
+  recheck: () => void;
+  /** Stop checking; pending deliveries see `isActive() === false` and should drop out. */
+  stop: () => void;
+}
+
+/**
+ * Keeps the latest fix and the enter/cooldown state across target changes. `watchPosition` only
+ * reports when the position changes, so a stationary user must be re-checked when targets change.
+ */
+export function createArrivalMonitor(
+  getTargets: () => ArrivalTarget[],
+  onArrivals: (arrivals: ArrivalTarget[], isActive: () => boolean) => void,
+  now: () => number = Date.now,
+): ArrivalMonitor {
+  let state = INITIAL_ARRIVAL_STATE;
+  let lastLocation: GeoPoint | null = null;
+  let active = true;
+  const isActive = () => active;
+
+  const check = () => {
+    if (!active || !lastLocation) return;
+    const result = detectArrivals(lastLocation, getTargets(), state, now());
+    state = result.state;
+    if (result.arrivals.length > 0) onArrivals(result.arrivals, isActive);
+  };
+
+  return {
+    update(location) {
+      lastLocation = location;
+      check();
+    },
+    recheck: check,
+    stop() {
+      active = false;
+      lastLocation = null;
+    },
+  };
+}

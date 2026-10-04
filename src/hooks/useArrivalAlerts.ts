@@ -2,12 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchStations } from "../lib/api";
 import {
   type ArrivalMessage,
-  type ArrivalState,
+  type ArrivalMonitor,
   type ArrivalTarget,
   buildArrivalMessage,
   collectArrivalTargets,
-  detectArrivals,
-  INITIAL_ARRIVAL_STATE,
+  createArrivalMonitor,
 } from "../lib/arrival";
 import { buildRouteMessage, type SavedRoute } from "../lib/routes";
 import type { StationView } from "../lib/schema";
@@ -93,7 +92,7 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
   );
   const targetsRef = useRef<ArrivalTarget[]>(targets);
   const stationsRef = useRef<StationView[]>(stations);
-  const stateRef = useRef<ArrivalState>(INITIAL_ARRIVAL_STATE);
+  const monitorRef = useRef<ArrivalMonitor | null>(null);
   targetsRef.current = targets;
   stationsRef.current = stations;
 
@@ -115,40 +114,50 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
     }
   }, []);
 
-  /** Returns how many notifications the OS accepted. */
-  const notifyArrivals = useCallback(async (arrivals: ArrivalTarget[], arrived = true) => {
-    // A hidden page pauses feed refreshes, so fetch the latest counts before reporting them.
-    let latest = stationsRef.current;
-    try {
-      latest = await fetchStations(AbortSignal.timeout(FRESH_FEED_TIMEOUT_MS));
-    } catch {
-      // report the last known counts instead
-    }
-    const byId = new Map(latest.map((station) => [station.id, station]));
-    let shown = 0;
-    for (const arrival of arrivals) {
-      const station = byId.get(arrival.station.id) ?? arrival.station;
-      const message = buildArrivalMessage({ ...arrival, station }, latest, { arrived });
-      setLastAlert({ ...message, at: new Date() });
-      if (await showSystemNotification(message, station.id)) shown += 1;
-    }
-    return shown;
-  }, []);
+  /**
+   * Returns how many notifications the OS accepted. Watch-triggered calls pass `isActive` so a
+   * delivery still waiting on the feed is dropped once alerts are turned off or the page unmounts.
+   */
+  const notifyArrivals = useCallback(
+    async (
+      arrivals: ArrivalTarget[],
+      {
+        arrived = true,
+        isActive = () => true,
+      }: { arrived?: boolean; isActive?: () => boolean } = {},
+    ) => {
+      // A hidden page pauses feed refreshes, so fetch the latest counts before reporting them.
+      let latest = stationsRef.current;
+      try {
+        latest = await fetchStations(AbortSignal.timeout(FRESH_FEED_TIMEOUT_MS));
+      } catch {
+        // report the last known counts instead
+      }
+      const byId = new Map(latest.map((station) => [station.id, station]));
+      let shown = 0;
+      for (const arrival of arrivals) {
+        if (!isActive()) break;
+        const station = byId.get(arrival.station.id) ?? arrival.station;
+        const message = buildArrivalMessage({ ...arrival, station }, latest, { arrived });
+        setLastAlert({ ...message, at: new Date() });
+        if (await showSystemNotification(message, station.id)) shown += 1;
+      }
+      return shown;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!enabled) return;
-    stateRef.current = INITIAL_ARRIVAL_STATE;
+    const monitor = createArrivalMonitor(
+      () => targetsRef.current,
+      (arrivals, isActive) => void notifyArrivals(arrivals, { isActive }),
+    );
+    monitorRef.current = monitor;
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         setWatchError("");
-        const result = detectArrivals(
-          { lat: position.coords.latitude, lng: position.coords.longitude },
-          targetsRef.current,
-          stateRef.current,
-          Date.now(),
-        );
-        stateRef.current = result.state;
-        if (result.arrivals.length > 0) void notifyArrivals(result.arrivals);
+        monitor.update({ lat: position.coords.latitude, lng: position.coords.longitude });
       },
       (error) => {
         setWatchError(
@@ -159,8 +168,17 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
       },
       { enableHighAccuracy: true, maximumAge: 15_000, timeout: 30_000 },
     );
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      monitor.stop();
+      if (monitorRef.current === monitor) monitorRef.current = null;
+    };
   }, [enabled, notifyArrivals]);
+
+  // The first fix can arrive before the feed loads; re-check it whenever the targets change.
+  useEffect(() => {
+    if (targets.length > 0) monitorRef.current?.recheck();
+  }, [targets]);
 
   const enableAlerts = useCallback(async () => {
     if (!("Notification" in window) || !navigator.geolocation) return;
@@ -189,7 +207,7 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
     setTestStatus("傳送中…");
     const shown =
       picks.length > 0
-        ? await notifyArrivals(picks, false)
+        ? await notifyArrivals(picks, { arrived: false })
         : Number(
             await showSystemNotification(
               {
