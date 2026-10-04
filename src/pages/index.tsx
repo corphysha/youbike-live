@@ -10,6 +10,7 @@ import { TripPlanner } from "../components/home/TripPlanner";
 import { useArrivalAlerts } from "../hooks/useArrivalAlerts";
 import { useFavorites } from "../hooks/useFavorites";
 import { useMapCollapse } from "../hooks/useMapCollapse";
+import { useSavedRoutes } from "../hooks/useSavedRoutes";
 import { useStationFeed } from "../hooks/useStationFeed";
 import { useStationSearch } from "../hooks/useStationSearch";
 import { useTrip } from "../hooks/useTrip";
@@ -20,7 +21,8 @@ export default function Home() {
   const { favorites, onToggleFavorite, onClearFavorites } = useFavorites();
   const { mapCollapsed, toggleMap } = useMapCollapse();
   const { userLocation, locationStatus, locationMessage, requestLocation } = useUserLocation();
-  const { trip, toggleTripStation, swapTrip, clearTrip } = useTrip();
+  const { trip, toggleTripStation, swapTrip, applyTrip, clearTrip } = useTrip();
+  const { routes, onToggleRoute, onRemoveRoute } = useSavedRoutes();
   const alerts = useArrivalAlerts({ stations, favorites, trip });
   const search = useStationSearch({ stations, areas, favorites, userLocation });
 
@@ -70,7 +72,20 @@ export default function Home() {
         {state === "ready" && (
           <>
             <div className="panel-grid">
-              <TripPlanner trip={trip} stations={stations} onSwap={swapTrip} onClear={clearTrip} />
+              <TripPlanner
+                trip={trip}
+                stations={stations}
+                routes={routes}
+                routeStatus={alerts.routeStatus}
+                onSwap={swapTrip}
+                onClear={clearTrip}
+                onToggleRoute={onToggleRoute}
+                onRemoveRoute={onRemoveRoute}
+                onUseRoute={(route) => {
+                  applyTrip({ startId: route.startId, endId: route.endId });
+                  void alerts.sendRouteAlert(route);
+                }}
+              />
               <ArrivalAlerts
                 enabled={alerts.alertsEnabled}
                 permission={alerts.alertPermission}

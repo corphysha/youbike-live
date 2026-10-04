@@ -9,6 +9,7 @@ import {
   detectArrivals,
   INITIAL_ARRIVAL_STATE,
 } from "../lib/arrival";
+import { buildRouteMessage, type SavedRoute } from "../lib/routes";
 import type { StationView } from "../lib/schema";
 import type { Trip } from "../lib/trip";
 
@@ -84,6 +85,7 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
   const [watchError, setWatchError] = useState("");
   const [lastAlert, setLastAlert] = useState<ArrivalAlertRecord | null>(null);
   const [testStatus, setTestStatus] = useState("");
+  const [routeStatus, setRouteStatus] = useState("");
 
   const targets = useMemo(
     () => collectArrivalTargets(stations, favorites, trip),
@@ -204,6 +206,32 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
     );
   }, [notifyArrivals]);
 
+  /** Notify the saved route's start bikes and end docks in one OS notification. */
+  const sendRouteAlert = useCallback(async (route: SavedRoute) => {
+    // Ask first, while the click still counts as a user gesture for the permission prompt.
+    const result = await requestNotificationPermission();
+    setPermission(result);
+    setRouteStatus("查詢中…");
+    let latest = stationsRef.current;
+    try {
+      latest = await fetchStations(AbortSignal.timeout(FRESH_FEED_TIMEOUT_MS));
+    } catch {
+      // report the last known counts instead
+    }
+    const message = buildRouteMessage(route, latest);
+    setLastAlert({ ...message, at: new Date() });
+    if (result !== "granted") {
+      setRouteStatus(
+        result === "unsupported"
+          ? "此瀏覽器不支援系統通知，結果顯示在「最近提醒」。"
+          : "未取得通知權限，結果顯示在「最近提醒」。",
+      );
+      return;
+    }
+    const shown = await showSystemNotification(message, route.id);
+    setRouteStatus(shown ? "已送出系統通知。" : "瀏覽器無法顯示系統通知，結果顯示在「最近提醒」。");
+  }, []);
+
   const disableAlerts = useCallback(() => {
     setEnabled(false);
     setWatchError("");
@@ -217,8 +245,10 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
     alertWatchError: watchError,
     lastAlert,
     testStatus,
+    routeStatus,
     enableAlerts,
     sendTestAlert,
+    sendRouteAlert,
     disableAlerts,
   };
 }

@@ -1,6 +1,7 @@
-import { ArrowsDownUp, NavigationArrow, Trash } from "@phosphor-icons/react";
+import { ArrowsDownUp, BellRinging, NavigationArrow, Star, Trash, X } from "@phosphor-icons/react";
 import { formatDistance, getDistanceMeters } from "../../lib/distance";
 import { navigateToStation } from "../../lib/navigation";
+import { routeId, type SavedRoute } from "../../lib/routes";
 import type { StationView } from "../../lib/schema";
 import {
   checkTripStation,
@@ -13,8 +14,13 @@ import {
 interface Props {
   trip: Trip;
   stations: StationView[];
+  routes: SavedRoute[];
+  routeStatus: string;
   onSwap: () => void;
   onClear: () => void;
+  onToggleRoute: (startId: string, endId: string) => void;
+  onRemoveRoute: (id: string) => void;
+  onUseRoute: (route: SavedRoute) => void;
 }
 
 const BADGE_CLASS: Record<TripCheck, string> = {
@@ -105,11 +111,91 @@ function TripLeg({
   );
 }
 
-export function TripPlanner({ trip, stations, onSwap, onClear }: Props) {
+function SavedRoutes({
+  routes,
+  byId,
+  activeId,
+  routeStatus,
+  onRemoveRoute,
+  onUseRoute,
+}: {
+  routes: SavedRoute[];
+  byId: Map<string, StationView>;
+  activeId: string | null;
+  routeStatus: string;
+  onRemoveRoute: (id: string) => void;
+  onUseRoute: (route: SavedRoute) => void;
+}) {
+  return (
+    <div className="saved-routes">
+      <span className="trip-alt-title">收藏路線 · 按一下套用並通知起點車輛與終點空位</span>
+      <ul>
+        {routes.map((route) => {
+          const start = byId.get(route.startId);
+          const end = byId.get(route.endId);
+          const startName = start?.name ?? route.startId;
+          const endName = end?.name ?? route.endId;
+          const startCheck = checkTripStation(start ?? null, "start");
+          const endCheck = checkTripStation(end ?? null, "end");
+          return (
+            <li key={route.id} className={route.id === activeId ? "active" : undefined}>
+              <button
+                type="button"
+                className="route-btn"
+                aria-label={`套用路線並通知：${startName} 到 ${endName}`}
+                onClick={() => onUseRoute(route)}
+              >
+                <span className="route-names">
+                  {startName} → {endName}
+                </span>
+                <span className="route-counts">
+                  <span className={`route-count ${BADGE_CLASS[startCheck]}`}>
+                    可借 {start?.status === 1 ? start.available : "—"}
+                  </span>
+                  <span className={`route-count ${BADGE_CLASS[endCheck]}`}>
+                    空位 {end?.status === 1 ? end.empty : "—"}
+                  </span>
+                  <BellRinging size={15} weight="bold" aria-hidden="true" />
+                </span>
+              </button>
+              <button
+                type="button"
+                className="route-remove"
+                aria-label={`刪除收藏路線：${startName} 到 ${endName}`}
+                onClick={() => onRemoveRoute(route.id)}
+              >
+                <X size={14} weight="bold" aria-hidden="true" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {routeStatus && (
+        <p className="trip-distance" aria-live="polite">
+          {routeStatus}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function TripPlanner({
+  trip,
+  stations,
+  routes,
+  routeStatus,
+  onSwap,
+  onClear,
+  onToggleRoute,
+  onRemoveRoute,
+  onUseRoute,
+}: Props) {
   const byId = new Map(stations.map((station) => [station.id, station]));
   const start = trip.startId ? (byId.get(trip.startId) ?? null) : null;
   const end = trip.endId ? (byId.get(trip.endId) ?? null) : null;
   const hasAny = Boolean(trip.startId || trip.endId);
+  const activeId = trip.startId && trip.endId ? routeId(trip.startId, trip.endId) : null;
+  const isSaved = activeId !== null && routes.some((route) => route.id === activeId);
 
   return (
     <section className="panel" aria-labelledby="trip-title">
@@ -120,6 +206,19 @@ export function TripPlanner({ trip, stations, onSwap, onClear }: Props) {
         </div>
         {hasAny && (
           <div className="panel-actions">
+            {trip.startId && trip.endId && (
+              <button
+                type="button"
+                className="locate-btn"
+                aria-pressed={isSaved}
+                onClick={() =>
+                  trip.startId && trip.endId && onToggleRoute(trip.startId, trip.endId)
+                }
+              >
+                <Star size={16} weight={isSaved ? "fill" : "bold"} aria-hidden="true" />
+                <span>{isSaved ? "已收藏" : "收藏路線"}</span>
+              </button>
+            )}
             <button
               type="button"
               className="locate-btn"
@@ -136,6 +235,16 @@ export function TripPlanner({ trip, stations, onSwap, onClear }: Props) {
           </div>
         )}
       </div>
+      {routes.length > 0 && (
+        <SavedRoutes
+          routes={routes}
+          byId={byId}
+          activeId={activeId}
+          routeStatus={routeStatus}
+          onRemoveRoute={onRemoveRoute}
+          onUseRoute={onUseRoute}
+        />
+      )}
       {hasAny ? (
         <div className="trip-body" aria-live="polite">
           <TripLeg leg="start" stationId={trip.startId} station={start} stations={stations} />
@@ -148,7 +257,7 @@ export function TripPlanner({ trip, stations, onSwap, onClear }: Props) {
         </div>
       ) : (
         <p className="panel-note">
-          在站點清單或地圖所選站點按「設為起點」「設為終點」即可開始檢測。
+          在站點清單或地圖所選站點按「設為起點」「設為終點」即可開始檢測；設好後可「收藏路線」。
         </p>
       )}
     </section>

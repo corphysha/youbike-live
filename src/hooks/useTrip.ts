@@ -20,9 +20,13 @@ export function useTrip() {
     setTrip((prev) => saveTrip({ startId: prev.endId, endId: prev.startId }));
   }, []);
 
+  const applyTrip = useCallback((next: Trip) => {
+    setTrip(saveTrip(next));
+  }, []);
+
   const clearTrip = useCallback(() => {
     setTrip(saveTrip(EMPTY_TRIP));
   }, []);
 
-  return { trip, toggleTripStation, swapTrip, clearTrip };
+  return { trip, toggleTripStation, swapTrip, applyTrip, clearTrip };
 }
