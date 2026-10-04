@@ -36,14 +36,26 @@ function persistEnabled(enabled: boolean) {
   }
 }
 
+/** `renotify` is missing from TypeScript's DOM lib but Chromium still honors it. */
+type AlertNotificationOptions = NotificationOptions & { renotify?: boolean };
+
 /**
  * Hand the message to the OS notification center (Windows/macOS/Android/iOS).
  * Prefer the service worker so it also works on Android, where `new Notification` throws.
+ * Web pages cannot set an OS priority; `urgent` keeps the notification on screen until dismissed
+ * (Chromium desktop) instead.
  */
-async function showSystemNotification({ title, body }: ArrivalMessage, tag: string) {
-  const options: NotificationOptions = {
+async function showSystemNotification(
+  { title, body }: ArrivalMessage,
+  tag: string,
+  { urgent = false }: { urgent?: boolean } = {},
+) {
+  const options: AlertNotificationOptions = {
     body,
     tag: `arrival-${tag}`,
+    // Replacing a same-tag notification is silent unless renotify is set.
+    renotify: true,
+    requireInteraction: urgent,
     icon: ICON_URL,
     badge: ICON_URL,
     data: { url: "/youbike-live/" },
@@ -140,7 +152,9 @@ export function useArrivalAlerts({ stations, favorites, trip }: Options) {
         const station = byId.get(arrival.station.id) ?? arrival.station;
         const message = buildArrivalMessage({ ...arrival, station }, latest, { arrived });
         setLastAlert({ ...message, at: new Date() });
-        if (await showSystemNotification(message, station.id)) shown += 1;
+        // Trip start/end alerts stay on screen; favorites are informational.
+        const urgent = arrival.role !== "favorite";
+        if (await showSystemNotification(message, station.id, { urgent })) shown += 1;
       }
       return shown;
     },
