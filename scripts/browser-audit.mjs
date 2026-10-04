@@ -49,14 +49,27 @@ export async function startBrowserAudit() {
     [
       "--headless=new",
       "--no-sandbox",
+      "--disable-dev-shm-usage",
       "--disable-gpu",
       "--hide-scrollbars",
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${profile}`,
       "about:blank",
     ],
-    { stdio: "ignore" },
+    { stdio: ["ignore", "ignore", "pipe"] },
   );
+  let chromeOutput = "";
+  let chromeFailure = "";
+  let chromeExited = false;
+  chrome.stderr.on("data", (chunk) => {
+    chromeOutput = (chromeOutput + chunk.toString()).slice(-4096);
+  });
+  chrome.on("error", (error) => {
+    chromeFailure = error.message;
+  });
+  chrome.once("exit", () => {
+    chromeExited = true;
+  });
 
   let socket;
   const close = () => {
@@ -68,6 +81,7 @@ export async function startBrowserAudit() {
   try {
     let version;
     for (let attempt = 0; attempt < 80; attempt += 1) {
+      if (chromeFailure || chromeExited) break;
       try {
         version = await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.json());
         break;
@@ -75,7 +89,10 @@ export async function startBrowserAudit() {
         await delay(100);
       }
     }
-    assert.ok(version, "Chrome DevTools did not start");
+    assert.ok(
+      version,
+      `Chrome DevTools did not start: ${chromeFailure || chromeOutput.trim() || "no browser output"}`,
+    );
 
     const target = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, {
       method: "PUT",
