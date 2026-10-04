@@ -37,6 +37,17 @@ bun run test
 bun run audit:responsive
 ```
 
+首頁模組分工：
+
+- `src/pages/index.tsx`：Pages Router 頁面、SEO 與模組組合。
+- `src/components/home/`：頁首、搜尋篩選、地圖區塊、所選站點與清單等 UI。
+- `src/components/ThemeToggle.tsx`：外觀切換、裝置外觀監聽與瀏覽器主題色。
+- `src/hooks/`：資料更新、定位、最愛、地圖收合與搜尋分頁的狀態和生命週期。
+- `src/lib/stations.ts`：不依賴瀏覽器的站點篩選、距離排序、縣市選項與統計。
+
+全域與 Leaflet CSS 統一由 `src/pages/_app.tsx` 載入；瀏覽器 API 在 effect 或事件處理中使用，
+讓 vinext 靜態匯出與 Next.js Pages Router 的伺服器渲染保持相容。
+
 ## CI 與部署
 
 PR（目標分支為 `main`）和 `main` 的每次 push 都會執行 lint、型別檢查、單元測試與生產建置。CI 使用最新穩定版 Bun，所有 GitHub Actions 均使用最新 major 版本標籤。
