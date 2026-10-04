@@ -40,6 +40,9 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Loading and map browser regression audit
+        run: bun run audit:loading
+
       - name: Upload Pages artifact
         if: >-
           github.ref == 'refs/heads/main' &&

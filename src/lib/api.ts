@@ -3,6 +3,12 @@ import { type Area, areaSchema, type StationView, stationSchema, toView } from "
 
 const STATION_URL = "https://apis.youbike.com.tw/json/station-yb2.json";
 const AREA_URL = "https://apis.youbike.com.tw/json/area-all.json";
+const REQUEST_TIMEOUT_MS = 20_000;
+
+function requestSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
 
 export class FeedError extends Error {
   constructor(
@@ -18,7 +24,7 @@ export class FeedError extends Error {
 export async function fetchStations(signal?: AbortSignal): Promise<StationView[]> {
   let res: Response;
   try {
-    res = await fetch(STATION_URL, { signal, cache: "no-store" });
+    res = await fetch(STATION_URL, { signal: requestSignal(signal), cache: "no-store" });
   } catch (err) {
     throw new FeedError("無法連線到 YouBike 資料來源", err);
   }
@@ -42,7 +48,7 @@ export async function fetchStations(signal?: AbortSignal): Promise<StationView[]
 /** Fetch + validate the area feed; returns [] when unavailable (non-fatal). */
 export async function fetchAreas(signal?: AbortSignal): Promise<Area[]> {
   try {
-    const res = await fetch(AREA_URL, { signal, cache: "no-store" });
+    const res = await fetch(AREA_URL, { signal: requestSignal(signal), cache: "default" });
     if (!res.ok) return [];
     const json: unknown = await res.json();
     const parsed = z.array(areaSchema).safeParse(json);

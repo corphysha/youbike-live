@@ -21,7 +21,9 @@ export function useStationSearch({ stations, areas, favorites, userLocation }: O
   const [query, setQuery] = useState("");
   const [areaCode, setAreaCode] = useState<string | null>(null);
   const [favOnly, setFavOnly] = useState(false);
-  const [visible, setVisible] = useState(PAGE_SIZE);
+  const [additionalCount, setAdditionalCount] = useState(0);
+  const pageSize = userLocation ? 10 : PAGE_SIZE;
+  const visible = pageSize + additionalCount;
 
   const stationAreas = useMemo(() => getStationAreas(stations, areas), [stations, areas]);
   const normalizedQuery = normalizeStationQuery(query);
@@ -33,8 +35,8 @@ export function useStationSearch({ stations, areas, favorites, userLocation }: O
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset pagination when any filter changes
   useEffect(() => {
-    setVisible(PAGE_SIZE);
-  }, [query, areaCode, favOnly]);
+    setAdditionalCount(0);
+  }, [query, areaCode, favOnly, pageSize, userLocation?.lat, userLocation?.lng]);
 
   const showAll = useCallback(() => {
     setAreaCode(null);
@@ -45,7 +47,7 @@ export function useStationSearch({ stations, areas, favorites, userLocation }: O
     [],
   );
   const toggleFavoritesOnly = useCallback(() => setFavOnly((prev) => !prev), []);
-  const loadMore = useCallback(() => setVisible((prev) => prev + PAGE_SIZE), []);
+  const loadMore = useCallback(() => setAdditionalCount((prev) => prev + PAGE_SIZE), []);
 
   return {
     query,

@@ -1,5 +1,5 @@
 import { CaretDown, CaretUp, Crosshair } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LocationStatus } from "../../hooks/useUserLocation";
 import { type GeoPoint, getDistanceMeters } from "../../lib/distance";
 import type { StationView } from "../../lib/schema";
@@ -30,6 +30,24 @@ export function StationMapSection({
   onToggleFavorite,
 }: Props) {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
+  const mapBody = useRef<HTMLDivElement>(null);
+  const [mapSeen, setMapSeen] = useState(false);
+
+  useEffect(() => {
+    if (mapCollapsed || mapSeen || !mapBody.current) return;
+    if (!("IntersectionObserver" in window)) {
+      setMapSeen(true);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setMapSeen(true);
+        observer.disconnect();
+      }
+    });
+    observer.observe(mapBody.current);
+    return () => observer.disconnect();
+  }, [mapCollapsed, mapSeen]);
   const selectedStation = stations.find((station) => station.id === selectedStationId) ?? null;
   const selectedDistance =
     selectedStation && userLocation ? getDistanceMeters(userLocation, selectedStation) : null;
@@ -87,24 +105,32 @@ export function StationMapSection({
           {locationMessage}
         </p>
       )}
-      {!mapCollapsed && (
-        <div id="map-body">
+      <div id="map-body" ref={mapBody} hidden={mapCollapsed}>
+        {mapSeen ? (
           <StationMap
+            active={!mapCollapsed}
             stations={stations}
             selectedId={selectedStationId}
             userLocation={userLocation}
             onSelectStation={(station) => setSelectedStationId(station.id)}
           />
-          {selectedStation && (
-            <SelectedStation
-              station={selectedStation}
-              isFav={favorites.includes(selectedStation.id)}
-              distanceMeters={selectedDistance}
-              onToggleFavorite={onToggleFavorite}
-            />
-          )}
-        </div>
-      )}
+        ) : (
+          <div className="map-canvas-wrap">
+            <div className="map-canvas" />
+            <div className="map-loading" role="status">
+              載入站點地圖…
+            </div>
+          </div>
+        )}
+        {selectedStation && (
+          <SelectedStation
+            station={selectedStation}
+            isFav={favorites.includes(selectedStation.id)}
+            distanceMeters={selectedDistance}
+            onToggleFavorite={onToggleFavorite}
+          />
+        )}
+      </div>
     </section>
   );
 }
