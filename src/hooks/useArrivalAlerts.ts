@@ -13,7 +13,7 @@ import type { StationView } from "../lib/schema";
 import type { Trip } from "../lib/trip";
 
 const ENABLED_KEY = "youbike-live:arrival-alerts";
-const ICON_URL = "/youbike-live/icons/icon-192.png";
+const ICON_URL = "/icons/icon-192.png";
 const FRESH_FEED_TIMEOUT_MS = 8_000;
 
 export type AlertPermission = NotificationPermission | "unsupported";
@@ -58,7 +58,7 @@ async function showSystemNotification(
     requireInteraction: urgent,
     icon: ICON_URL,
     badge: ICON_URL,
-    data: { url: "/youbike-live/" },
+    data: { url: "/" },
   };
   try {
     const registration = await navigator.serviceWorker?.getRegistration();

@@ -1,9 +1,7 @@
-/** vinext static export to GitHub Pages — /youbike-live/ base path */
+/** vinext static export to GitHub Pages — served from the custom domain root (uu.xcc.tw) */
 /** @type {Record<string, unknown>} */
 const config = {
   output: "export",
-  basePath: "/youbike-live",
-  assetPrefix: "/youbike-live",
   images: { unoptimized: true },
 };
 
