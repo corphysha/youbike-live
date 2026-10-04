@@ -2,7 +2,7 @@ import { type GeoPoint, getDistanceMeters } from "./distance";
 import type { Area, StationView } from "./schema";
 
 interface StationFilters {
-  query: string;
+  normalizedQuery: string;
   areaCode: string | null;
   favOnly: boolean;
   favorites: string[];
@@ -18,13 +18,17 @@ export function getStationAreas(stations: StationView[], areas: Area[]) {
     .map((code) => ({ code, name: areaByCode.get(code)?.area_name_tw ?? code }));
 }
 
-/** Search treats 台 and 臺 alike; location sorting leaves the source feed untouched. */
+/** A shared search key also keeps memoized results stable across equivalent queries. */
+export function normalizeStationQuery(query: string): string {
+  return query.trim().toLowerCase().replace(/台/g, "臺");
+}
+
+/** Accepts a normalized search key; distance sorting leaves the source feed untouched. */
 export function filterStations(
   stations: StationView[],
-  { query, areaCode, favOnly, favorites, userLocation }: StationFilters,
+  { normalizedQuery: q, areaCode, favOnly, favorites, userLocation }: StationFilters,
 ): StationView[] {
   const favSet = new Set(favorites);
-  const q = query.trim().toLowerCase().replace(/台/g, "臺");
   const norm = (text: string) => text.toLowerCase().replace(/台/g, "臺");
   const matches = stations.filter((station) => {
     if (favOnly && !favSet.has(station.id)) return false;

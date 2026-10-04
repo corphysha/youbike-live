@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Area, StationView } from "../src/lib/schema";
-import { filterStations, getStationAreas, getStationTotals } from "../src/lib/stations";
+import {
+  filterStations,
+  getStationAreas,
+  getStationTotals,
+  normalizeStationQuery,
+} from "../src/lib/stations";
 
 const station: StationView = {
   id: "500100001",
@@ -27,7 +32,7 @@ const stations: StationView[] = [
 ];
 
 const filters = {
-  query: "",
+  normalizedQuery: "",
   areaCode: null,
   favOnly: false,
   favorites: [] as string[],
@@ -35,10 +40,24 @@ const filters = {
 };
 
 describe("station search", () => {
+  test("equivalent whitespace, case and 台/臺 queries share one search key", () => {
+    expect(normalizeStationQuery("  TAIPEI台  ")).toBe("taipei臺");
+    expect(normalizeStationQuery(" 台北車站 ")).toBe(normalizeStationQuery("臺北車站"));
+    expect(normalizeStationQuery("TAIPEI MAIN")).toBe(normalizeStationQuery(" taipei main "));
+  });
+
+  test("whitespace-only queries preserve the unfiltered feed", () => {
+    expect(
+      filterStations(stations, { ...filters, normalizedQuery: normalizeStationQuery(" \t\n ") }),
+    ).toEqual(stations);
+  });
+
   test.each([" 台北車站 ", "臺北車站", "TAIPEI MAIN", "中正", "臺北市", "500100001"])(
     "searches names, districts, addresses and IDs: %s",
     (query) => {
-      expect(filterStations([station], { ...filters, query })).toEqual([station]);
+      expect(
+        filterStations([station], { ...filters, normalizedQuery: normalizeStationQuery(query) }),
+      ).toEqual([station]);
     },
   );
 
@@ -46,14 +65,16 @@ describe("station search", () => {
     expect(
       filterStations(stations, {
         ...filters,
-        query: "車站",
+        normalizedQuery: normalizeStationQuery("車站"),
         areaCode: "00",
         favOnly: true,
         favorites: [station.id, "500200002", "removed"],
       }),
     ).toEqual([station]);
     expect(filterStations(stations, { ...filters, favOnly: true })).toEqual([]);
-    expect(filterStations(stations, { ...filters, query: "不存在" })).toEqual([]);
+    expect(
+      filterStations(stations, { ...filters, normalizedQuery: normalizeStationQuery("不存在") }),
+    ).toEqual([]);
   });
 
   test("preserves feed order without location and sorts by distance without mutating input", () => {

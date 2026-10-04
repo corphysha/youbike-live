@@ -20,6 +20,7 @@ export default function Home() {
 
   const clearFavorites = () => {
     onClearFavorites();
+    // Return to the station list so clearing favorites does not leave an empty favorites-only view.
     search.setFavOnly(false);
   };
 

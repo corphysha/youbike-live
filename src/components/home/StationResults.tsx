@@ -61,7 +61,7 @@ export function StationResults({
       )}
 
       {remainingCount > 0 && (
-        <button type="button" className="load-more" onClick={() => onLoadMore()}>
+        <button type="button" className="load-more" onClick={onLoadMore}>
           顯示更多（還有 {remainingCount.toLocaleString()} 站）
         </button>
       )}

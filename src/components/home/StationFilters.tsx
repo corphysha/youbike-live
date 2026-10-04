@@ -59,18 +59,11 @@ export function StationFilters({
           type="button"
           className="chip"
           aria-pressed={!areaCode && !favOnly}
-          onClick={() => {
-            onShowAll();
-          }}
+          onClick={onShowAll}
         >
           全部
         </button>
-        <button
-          type="button"
-          className="chip"
-          aria-pressed={favOnly}
-          onClick={() => onToggleFavorites()}
-        >
+        <button type="button" className="chip" aria-pressed={favOnly} onClick={onToggleFavorites}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
             <Star size={12} weight={favOnly ? "fill" : "regular"} />
             最愛{favoriteCount > 0 ? ` ${favoriteCount}` : ""}
