@@ -51,6 +51,8 @@ export async function startBrowserAudit() {
       "--no-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
       "--hide-scrollbars",
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${profile}`,
@@ -80,7 +82,8 @@ export async function startBrowserAudit() {
   };
   try {
     let version;
-    for (let attempt = 0; attempt < 80; attempt += 1) {
+    // Hosted runners can take longer to initialize Chrome/DBus. This is before page timing.
+    for (let attempt = 0; attempt < 300; attempt += 1) {
       if (chromeFailure || chromeExited) break;
       try {
         version = await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.json());
