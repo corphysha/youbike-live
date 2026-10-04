@@ -18,7 +18,7 @@
 ## 技術
 
 - vinext（Cloudflare 的 Next.js API on Vite）靜態匯出
-- Bun 1.3 + TypeScript strict + Biome 2.5 + Zod 4
+- Bun 1.4.2 + TypeScript strict + Biome 2.5 + Zod 4
 - React 19 + Phosphor Icons
 - Leaflet + MarkerCluster（OpenStreetMap 底圖）
 - 定位後依 Haversine 直線距離排序
