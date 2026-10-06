@@ -5,7 +5,7 @@ interface Props {
   stationCount: number;
   lastFetch: Date | null;
   isUpdating: boolean;
-  announceUpdate: boolean;
+  updateMessage: string;
   onRefresh: () => Promise<void>;
 }
 
@@ -13,7 +13,7 @@ export function PageHeader({
   stationCount,
   lastFetch,
   isUpdating,
-  announceUpdate,
+  updateMessage,
   onRefresh,
 }: Props) {
   return (
@@ -60,7 +60,7 @@ export function PageHeader({
         </div>
       </div>
       <span className="sr-only" role="status">
-        {announceUpdate ? "站點資料更新中" : ""}
+        {updateMessage}
       </span>
       {isUpdating && (
         <div className="feed-progress" aria-hidden="true">

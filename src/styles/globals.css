@@ -303,16 +303,13 @@ a {
 
 .refresh-btn[aria-disabled="true"] {
   cursor: progress;
+  background: var(--bg-sunken);
+  color: var(--ink-2);
 }
 
 .masthead .refresh-btn {
   flex: none;
   white-space: nowrap;
-}
-
-.masthead .refresh-btn[aria-disabled="true"] {
-  background: var(--bg-sunken);
-  color: var(--ink-2);
 }
 
 .refresh-label {

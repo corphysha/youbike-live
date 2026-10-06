@@ -21,7 +21,7 @@ export function FeedStatus({ state, isUpdating, errorMessage, onRetry }: Props) 
       )}
 
       {errorMessage && (
-        <div className="status-strip error" role="alert">
+        <div className="status-strip error">
           <WifiSlash size={16} className="status-icon" aria-hidden="true" />
           <span>
             {errorMessage}

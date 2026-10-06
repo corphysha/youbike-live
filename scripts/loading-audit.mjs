@@ -5,7 +5,10 @@ import { startBrowserAudit } from "./browser-audit.mjs";
 const { cdp, evaluate, targetUrl, close, waitFor, errors, on } = await startBrowserAudit();
 const settleStyles = () =>
   evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
-const assertUpdateFeedback = async (updating, announce = updating) => {
+const assertUpdateFeedback = async (
+  updating,
+  expectedMessage = updating ? "站點資料更新中" : "站點資料已更新",
+) => {
   await waitFor(
     `document.querySelector(".masthead .refresh-btn")?.getAttribute("aria-disabled") === "${updating}"`,
   );
@@ -40,7 +43,7 @@ const assertUpdateFeedback = async (updating, announce = updating) => {
   assert.equal(feedback.accessibleLabel, "重新整理站點資料");
   assert.equal(feedback.progressSemantics, false);
   assert.equal(feedback.liveRegions, 1);
-  assert.equal(feedback.status, announce ? "站點資料更新中" : "");
+  assert.equal(feedback.status, expectedMessage);
   assert.equal(feedback.spinning, updating);
   assert.equal(feedback.progress, updating);
   assert.equal(feedback.overflow, false, "refresh feedback must fit the viewport");
@@ -53,7 +56,6 @@ const assertUpdateFeedback = async (updating, announce = updating) => {
   } else {
     assert.ok(["更新", "重新整理"].includes(feedback.label), JSON.stringify(feedback));
     assert.equal(feedback.iconAnimation, "none");
-    assert.equal(feedback.status, "");
   }
 };
 try {
@@ -246,7 +248,7 @@ try {
     ]) {
       await evaluate(`delete audit.releaseStations; ${trigger}`);
       await waitFor("audit.releaseStations");
-      await assertUpdateFeedback(true, trigger.includes("click"));
+      await assertUpdateFeedback(true, trigger.includes("click") ? "站點資料更新中" : "");
       assert.ok(
         await evaluate(
           'document.activeElement === document.querySelector(".masthead .refresh-btn")',
@@ -260,7 +262,7 @@ try {
         "labels must reserve their intrinsic width at enlarged text sizes",
       );
       await evaluate("audit.releaseStations()");
-      await assertUpdateFeedback(false);
+      await assertUpdateFeedback(false, trigger.includes("click") ? "站點資料已更新" : "");
       assert.ok(
         await evaluate(
           'document.activeElement === document.querySelector(".masthead .refresh-btn")',
@@ -475,7 +477,8 @@ try {
   assert.equal(await evaluate("audit.stationRequests"), requests + 1);
   await evaluate("audit.releaseStations(); audit.held = false");
   await waitFor('document.querySelector(".status-strip.error")');
-  await assertUpdateFeedback(false);
+  const failedUpdateMessage = "更新失敗：資料來源回應 503";
+  await assertUpdateFeedback(false, failedUpdateMessage);
   assert.ok(
     await evaluate(
       'document.querySelector(".status-strip.error").textContent.includes("上次成功更新")',
@@ -485,7 +488,7 @@ try {
     await evaluate('document.querySelectorAll(".station-list .station-card").length'),
     10,
   );
-  // Repeated failures must retain the alert node, message and list position without new announcements.
+  // Repeated failures retain the error node and layout; only manual attempts announce their outcome.
   await evaluate(`(() => {
     audit.savedError = document.querySelector(".status-strip.error");
     audit.savedErrorText = audit.savedError.textContent;
@@ -496,9 +499,59 @@ try {
       }
     });
     audit.errorObserver.observe(document.querySelector("main"), { childList: true, characterData: true, subtree: true });
+    audit.updateMessages = [];
+    const status = document.querySelector(".masthead [role=status]");
+    audit.statusObserver = new MutationObserver(() => audit.updateMessages.push(status.textContent.trim()));
+    audit.statusObserver.observe(status, { childList: true, characterData: true, subtree: true });
     audit.held = true;
     document.querySelector(".masthead .refresh-btn").focus();
   })()`);
+  for (const selector of [".masthead .refresh-btn", ".status-strip .refresh-btn"]) {
+    await evaluate(`(() => {
+      audit.updateMessages = [];
+      delete audit.releaseStations;
+      const button = document.querySelector(${JSON.stringify(selector)});
+      button.focus();
+      button.click();
+    })()`);
+    await waitFor("audit.releaseStations");
+    await assertUpdateFeedback(true);
+    // Background-color transitions last 120ms; compare the settled busy colors.
+    await delay(150);
+    const styles = await evaluate(`(() => {
+      const retry = getComputedStyle(document.querySelector(".status-strip .refresh-btn"));
+      const header = getComputedStyle(document.querySelector(".masthead .refresh-btn"));
+      return { retry: { color: retry.color, background: retry.backgroundColor },
+        header: { color: header.color, background: header.backgroundColor } };
+    })()`);
+    assert.deepEqual(
+      styles.retry,
+      styles.header,
+      "busy retry must share the header's visual state",
+    );
+    assert.ok(
+      await evaluate(
+        `document.activeElement === document.querySelector(${JSON.stringify(selector)})`,
+      ),
+    );
+    await evaluate("audit.releaseStations()");
+    await assertUpdateFeedback(false, failedUpdateMessage);
+    assert.deepEqual(await evaluate("audit.updateMessages"), [
+      "站點資料更新中",
+      failedUpdateMessage,
+    ]);
+    assert.ok(
+      await evaluate(
+        'audit.savedError === document.querySelector(".status-strip.error") && audit.savedError.textContent === audit.savedErrorText',
+      ),
+    );
+    assert.equal(
+      await evaluate('document.querySelector(".status-strip.error").getAttribute("role")'),
+      null,
+      "visible errors must not duplicate the foreground live region announcement",
+    );
+  }
+  await evaluate('document.querySelector(".masthead .refresh-btn").focus()');
   for (const trigger of [
     "audit.refresh()",
     'document.dispatchEvent(new Event("visibilitychange"))',
@@ -506,9 +559,9 @@ try {
     const resultTop = await evaluate(
       'document.querySelector(".station-list").getBoundingClientRect().top',
     );
-    await evaluate(`delete audit.releaseStations; ${trigger}`);
+    await evaluate(`audit.updateMessages = []; delete audit.releaseStations; ${trigger}`);
     await waitFor("audit.releaseStations");
-    await assertUpdateFeedback(true, false);
+    await assertUpdateFeedback(true, "");
     assert.ok(
       await evaluate(
         'audit.savedError === document.querySelector(".status-strip.error") && audit.savedError.textContent === audit.savedErrorText',
@@ -519,7 +572,12 @@ try {
       resultTop,
     );
     await evaluate("audit.releaseStations()");
-    await assertUpdateFeedback(false);
+    await assertUpdateFeedback(false, "");
+    assert.deepEqual(
+      await evaluate("audit.updateMessages.filter(Boolean)"),
+      [],
+      "background failures must not announce another outcome",
+    );
     assert.equal(
       await evaluate('document.querySelector(".station-list").getBoundingClientRect().top'),
       resultTop,
@@ -529,7 +587,9 @@ try {
     );
   }
   assert.deepEqual(await evaluate("audit.errorMutations"), []);
-  await evaluate("audit.errorObserver.disconnect(); audit.held = false");
+  await evaluate(
+    "audit.errorObserver.disconnect(); audit.statusObserver.disconnect(); audit.held = false",
+  );
   await evaluate(
     'audit.fail = false; audit.available = 4; document.querySelector(".refresh-btn").click()',
   );
@@ -544,6 +604,7 @@ try {
   // No GPS preserves nationwide browsing; a failed first request can be retried.
   await cdp("Page.navigate", { url: `${targetUrl}?denied&failure&fallback` });
   await waitFor('document.querySelector(".status-strip.error")');
+  await assertUpdateFeedback(false, failedUpdateMessage);
   assert.equal(await evaluate('document.querySelectorAll(".station-card").length'), 0);
   await evaluate(
     'audit.fail = false; audit.held = true; document.querySelector(".status-strip .refresh-btn").click()',
@@ -612,9 +673,9 @@ try {
   assert.equal(await evaluate("audit.areaRequests"), 1);
   await evaluate("audit.areaFail = false; audit.held = true; audit.refresh()");
   await waitFor("audit.areaRequests === 2");
-  await assertUpdateFeedback(true, false);
+  await assertUpdateFeedback(true, "");
   await evaluate("audit.held = false; audit.releaseStations()");
-  await assertUpdateFeedback(false);
+  await assertUpdateFeedback(false, "");
   assert.equal(await evaluate("!!audit.releaseAreas"), true, "area metadata remains independent");
   await evaluate('document.querySelector(".refresh-btn").click()');
   assert.equal(await evaluate("audit.areaRequests"), 2, "pending metadata must be deduplicated");
