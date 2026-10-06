@@ -17,7 +17,8 @@ import { useTrip } from "../hooks/useTrip";
 import { useUserLocation } from "../hooks/useUserLocation";
 
 export default function Home() {
-  const { state, errorMsg, stations, areas, lastFetch, now, load } = useStationFeed();
+  const { state, isUpdating, updateMessage, errorMsg, stations, areas, lastFetch, now, refresh } =
+    useStationFeed();
   const { favorites, onToggleFavorite, onClearFavorites } = useFavorites();
   const { mapCollapsed, toggleMap } = useMapCollapse();
   const { userLocation, locationStatus, locationMessage, requestLocation } = useUserLocation();
@@ -49,8 +50,9 @@ export default function Home() {
       <PageHeader
         stationCount={stations.length}
         lastFetch={lastFetch}
-        isLoading={state === "loading"}
-        onRefresh={load}
+        isUpdating={isUpdating}
+        updateMessage={updateMessage}
+        onRefresh={refresh}
       />
 
       <main className="shell" id="main-content">
@@ -67,7 +69,12 @@ export default function Home() {
           onClearFavorites={clearFavorites}
         />
 
-        <FeedStatus state={state} errorMessage={errorMsg} onRetry={load} />
+        <FeedStatus
+          state={state}
+          isUpdating={isUpdating}
+          errorMessage={errorMsg}
+          onRetry={refresh}
+        />
 
         {state === "ready" && (
           <>

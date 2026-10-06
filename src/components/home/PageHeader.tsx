@@ -4,11 +4,18 @@ import { ThemeToggle } from "../ThemeToggle";
 interface Props {
   stationCount: number;
   lastFetch: Date | null;
-  isLoading: boolean;
+  isUpdating: boolean;
+  updateMessage: string;
   onRefresh: () => Promise<void>;
 }
 
-export function PageHeader({ stationCount, lastFetch, isLoading, onRefresh }: Props) {
+export function PageHeader({
+  stationCount,
+  lastFetch,
+  isUpdating,
+  updateMessage,
+  onRefresh,
+}: Props) {
   return (
     <header className="masthead">
       <div className="masthead-inner">
@@ -31,22 +38,35 @@ export function PageHeader({ stationCount, lastFetch, isLoading, onRefresh }: Pr
           <button
             type="button"
             className="refresh-btn"
-            onClick={() => void onRefresh()}
-            disabled={isLoading}
+            onClick={() => {
+              if (!isUpdating) void onRefresh();
+            }}
+            aria-disabled={isUpdating}
             aria-label="重新整理站點資料"
           >
             <ArrowsClockwise
               size={14}
-              className={isLoading ? "spin" : undefined}
+              className={isUpdating ? "spin" : undefined}
               aria-hidden="true"
             />
-            <span className="refresh-label-full">重新整理</span>
-            <span className="refresh-label-compact" aria-hidden="true">
-              更新
+            <span className="refresh-label" aria-hidden="true">
+              <span data-hidden={isUpdating || undefined}>
+                <span className="refresh-label-full">重新整理</span>
+                <span className="refresh-label-compact">更新</span>
+              </span>
+              <span data-hidden={!isUpdating || undefined}>更新中</span>
             </span>
           </button>
         </div>
       </div>
+      <span className="sr-only" role="status">
+        {updateMessage}
+      </span>
+      {isUpdating && (
+        <div className="feed-progress" aria-hidden="true">
+          <span className="feed-progress-indicator" />
+        </div>
+      )}
     </header>
   );
 }

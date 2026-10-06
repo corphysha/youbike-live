@@ -3,6 +3,61 @@ import { setTimeout as delay } from "node:timers/promises";
 import { startBrowserAudit } from "./browser-audit.mjs";
 
 const { cdp, evaluate, targetUrl, close, waitFor, errors, on } = await startBrowserAudit();
+const settleStyles = () =>
+  evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+const assertUpdateFeedback = async (
+  updating,
+  expectedMessage = updating ? "站點資料更新中" : "站點資料已更新",
+) => {
+  await waitFor(
+    `document.querySelector(".masthead .refresh-btn")?.getAttribute("aria-disabled") === "${updating}"`,
+  );
+  // Let style invalidation and painting catch up with React's attribute updates.
+  await settleStyles();
+  const feedback = await evaluate(`(() => {
+    const button = document.querySelector(".masthead .refresh-btn");
+    const progress = document.querySelector(".feed-progress");
+    const indicator = document.querySelector(".feed-progress-indicator");
+    const icon = button.querySelector("svg");
+    const label = [...button.querySelectorAll(".refresh-label > span")].find(el => getComputedStyle(el).visibility !== "hidden");
+    return {
+      busy: button.getAttribute("aria-busy"),
+      disabled: button.disabled,
+      label: label.innerText.trim(),
+      accessibleLabel: button.getAttribute("aria-label"),
+      spinning: icon.classList.contains("spin"),
+      iconAnimation: getComputedStyle(icon).animationName,
+      progress: !!progress,
+      decorativeProgress: progress?.getAttribute("aria-hidden"),
+      progressSemantics: !!document.querySelector(".masthead progress, .masthead [role=progressbar]"),
+      liveRegions: document.querySelectorAll(".masthead [role=status]").length,
+      barHeight: indicator?.getBoundingClientRect().height,
+      barAnimation: indicator && getComputedStyle(indicator).animationName,
+      animated: !matchMedia("(prefers-reduced-motion: reduce)").matches,
+      status: document.querySelector(".masthead [role=status]").textContent.trim(),
+      overflow: document.documentElement.scrollWidth > innerWidth
+    };
+  })()`);
+  assert.equal(feedback.busy, null, "the live region is the only update announcement");
+  assert.equal(feedback.disabled, false, "aria-disabled must preserve keyboard focus");
+  assert.equal(feedback.accessibleLabel, "重新整理站點資料");
+  assert.equal(feedback.progressSemantics, false);
+  assert.equal(feedback.liveRegions, 1);
+  assert.equal(feedback.status, expectedMessage);
+  assert.equal(feedback.spinning, updating);
+  assert.equal(feedback.progress, updating);
+  assert.equal(feedback.overflow, false, "refresh feedback must fit the viewport");
+  if (updating) {
+    assert.equal(feedback.label, "更新中");
+    assert.equal(feedback.decorativeProgress, "true");
+    assert.equal(feedback.barHeight, 3);
+    assert.equal(feedback.iconAnimation, feedback.animated ? "spin" : "none");
+    assert.equal(feedback.barAnimation, feedback.animated ? "feed-progress" : "none");
+  } else {
+    assert.ok(["更新", "重新整理"].includes(feedback.label), JSON.stringify(feedback));
+    assert.equal(feedback.iconAnimation, "none");
+  }
+};
 try {
   await cdp("Emulation.setDeviceMetricsOverride", {
     width: 1024,
@@ -18,6 +73,7 @@ try {
     source: `
     window.audit = { stationRequests: 0, areaRequests: 0, fail: false, available: 3,
       lat: 25.0478, lng: 121.5319, denied: false, held: false };
+    if (location.search.includes("held")) audit.held = true;
     if (location.search.includes("denied")) audit.denied = true;
     if (location.search.includes("failure")) audit.fail = true;
     if (location.search.includes("fallback")) delete window.IntersectionObserver;
@@ -138,11 +194,85 @@ try {
       body: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
     });
   });
-  await cdp("Page.navigate", { url: targetUrl });
+  await cdp("Page.navigate", { url: `${targetUrl}?held` });
+  await waitFor("audit.releaseStations");
+  // First load shows honest progress and readable feedback on both desktop and small phones.
+  for (const width of [320, 390, 1024]) {
+    await cdp("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: width < 768,
+    });
+    await assertUpdateFeedback(true);
+  }
+  await cdp("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
+  });
+  await assertUpdateFeedback(true);
+  await cdp("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+  });
+  await evaluate("audit.held = false; audit.releaseStations()");
   await waitFor(
     'document.querySelectorAll(".station-list .station-card").length === 10',
     "nearest ten cards before area response",
   );
+  await assertUpdateFeedback(false);
+  // Foreground and background updates preserve focus and size, including enlarged fallback text.
+  for (const [width, fontSize] of [
+    [320, 18],
+    [1024, 20],
+  ]) {
+    await cdp("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: width < 768,
+    });
+    await evaluate(`(() => {
+      const button = document.querySelector(".masthead .refresh-btn");
+      button.style.fontSize = "${fontSize}px";
+      button.style.fontFamily = "serif";
+      button.focus();
+      audit.held = true;
+    })()`);
+    await settleStyles();
+    const dimensions = await evaluate(
+      '({ width: document.querySelector(".masthead .refresh-btn").offsetWidth, height: document.querySelector(".masthead").offsetHeight })',
+    );
+    for (const trigger of [
+      'document.querySelector(".masthead .refresh-btn").click()',
+      "audit.refresh()",
+      'document.dispatchEvent(new Event("visibilitychange"))',
+    ]) {
+      await evaluate(`delete audit.releaseStations; ${trigger}`);
+      await waitFor("audit.releaseStations");
+      await assertUpdateFeedback(true, trigger.includes("click") ? "站點資料更新中" : "");
+      assert.ok(
+        await evaluate(
+          'document.activeElement === document.querySelector(".masthead .refresh-btn")',
+        ),
+      );
+      assert.deepEqual(
+        await evaluate(
+          '({ width: document.querySelector(".masthead .refresh-btn").offsetWidth, height: document.querySelector(".masthead").offsetHeight })',
+        ),
+        dimensions,
+        "labels must reserve their intrinsic width at enlarged text sizes",
+      );
+      await evaluate("audit.releaseStations()");
+      await assertUpdateFeedback(false, trigger.includes("click") ? "站點資料已更新" : "");
+      assert.ok(
+        await evaluate(
+          'document.activeElement === document.querySelector(".masthead .refresh-btn")',
+        ),
+      );
+    }
+    await evaluate(
+      'audit.held = false; document.querySelector(".masthead .refresh-btn").removeAttribute("style")',
+    );
+  }
   assert.equal(await evaluate("audit.areaRequests"), 1);
   assert.equal(await evaluate("audit.mapCreates"), 0, "saved collapsed map must stay unloaded");
   assert.equal(tileRequests, 0);
@@ -305,33 +435,251 @@ try {
 
   // Failed refresh retains usable data; concurrent clicks do not duplicate a pending request.
   const requests = await evaluate("audit.stationRequests");
+  const headerBefore = await evaluate(`(() => {
+    const button = document.querySelector(".masthead .refresh-btn").getBoundingClientRect();
+    return { width: button.width, height: document.querySelector(".masthead").offsetHeight };
+  })()`);
   await evaluate(
-    'audit.held = true; audit.fail = true; document.querySelector(".refresh-btn").click(); document.querySelector(".refresh-btn").click()',
+    'audit.held = true; audit.fail = true; document.querySelector(".masthead .refresh-btn").focus(); document.querySelector(".refresh-btn").click(); document.querySelector(".refresh-btn").click()',
   );
   await waitFor(`audit.stationRequests === ${requests + 1}`);
-  await evaluate("audit.releaseStations(); audit.held = false");
-  await delay(100);
+  await assertUpdateFeedback(true);
+  assert.deepEqual(
+    await evaluate(`(() => {
+      const button = document.querySelector(".masthead .refresh-btn").getBoundingClientRect();
+      return { width: button.width, height: document.querySelector(".masthead").offsetHeight };
+    })()`),
+    headerBefore,
+    "refresh feedback must not change header or button dimensions",
+  );
   assert.equal(
     await evaluate('document.querySelectorAll(".station-list .station-card").length'),
     10,
+  );
+  // Exercise button guarding and the load guard independently, allowing async work to settle.
+  await evaluate('document.querySelector(".refresh-btn").click()');
+  await cdp("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Enter",
+    code: "Enter",
+    windowsVirtualKeyCode: 13,
+  });
+  await cdp("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "Enter",
+    code: "Enter",
+    windowsVirtualKeyCode: 13,
+  });
+  await delay(100);
+  assert.equal(await evaluate("audit.stationRequests"), requests + 1);
+  await evaluate("audit.refresh(); audit.refresh()");
+  await delay(100);
+  assert.equal(await evaluate("audit.stationRequests"), requests + 1);
+  await evaluate("audit.releaseStations(); audit.held = false");
+  await waitFor('document.querySelector(".status-strip.error")');
+  const failedUpdateMessage = "更新失敗：資料來源回應 503";
+  await assertUpdateFeedback(false, failedUpdateMessage);
+  assert.ok(
+    await evaluate(
+      'document.querySelector(".status-strip.error").textContent.includes("上次成功更新")',
+    ),
+  );
+  assert.equal(
+    await evaluate('document.querySelectorAll(".station-list .station-card").length'),
+    10,
+  );
+  // Repeated failures retain the error node and layout; only manual attempts announce their outcome.
+  await evaluate(`(() => {
+    audit.savedError = document.querySelector(".status-strip.error");
+    audit.savedErrorText = audit.savedError.textContent;
+    audit.errorMutations = [];
+    audit.errorObserver = new MutationObserver(records => {
+      for (const record of records) {
+        if ([...record.removedNodes].includes(audit.savedError) || record.target === audit.savedError || audit.savedError.contains(record.target)) audit.errorMutations.push(record.type);
+      }
+    });
+    audit.errorObserver.observe(document.querySelector("main"), { childList: true, characterData: true, subtree: true });
+    audit.updateMessages = [];
+    const status = document.querySelector(".masthead [role=status]");
+    audit.statusObserver = new MutationObserver(() => audit.updateMessages.push(status.textContent.trim()));
+    audit.statusObserver.observe(status, { childList: true, characterData: true, subtree: true });
+    audit.held = true;
+    document.querySelector(".masthead .refresh-btn").focus();
+  })()`);
+  for (const selector of [".masthead .refresh-btn", ".status-strip .refresh-btn"]) {
+    await evaluate(`(() => {
+      audit.updateMessages = [];
+      delete audit.releaseStations;
+      const button = document.querySelector(${JSON.stringify(selector)});
+      button.focus();
+      button.click();
+    })()`);
+    await waitFor("audit.releaseStations");
+    await assertUpdateFeedback(true);
+    // Background-color transitions last 120ms; compare the settled busy colors.
+    await delay(150);
+    const styles = await evaluate(`(() => {
+      const retry = getComputedStyle(document.querySelector(".status-strip .refresh-btn"));
+      const header = getComputedStyle(document.querySelector(".masthead .refresh-btn"));
+      return { retry: { color: retry.color, background: retry.backgroundColor },
+        header: { color: header.color, background: header.backgroundColor } };
+    })()`);
+    assert.deepEqual(
+      styles.retry,
+      styles.header,
+      "busy retry must share the header's visual state",
+    );
+    assert.ok(
+      await evaluate(
+        `document.activeElement === document.querySelector(${JSON.stringify(selector)})`,
+      ),
+    );
+    await evaluate("audit.releaseStations()");
+    await assertUpdateFeedback(false, failedUpdateMessage);
+    assert.deepEqual(await evaluate("audit.updateMessages"), [
+      "站點資料更新中",
+      failedUpdateMessage,
+    ]);
+    assert.ok(
+      await evaluate(
+        'audit.savedError === document.querySelector(".status-strip.error") && audit.savedError.textContent === audit.savedErrorText',
+      ),
+    );
+    assert.equal(
+      await evaluate('document.querySelector(".status-strip.error").getAttribute("role")'),
+      null,
+      "visible errors must not duplicate the foreground live region announcement",
+    );
+  }
+  await evaluate('document.querySelector(".masthead .refresh-btn").focus()');
+  for (const trigger of [
+    "audit.refresh()",
+    'document.dispatchEvent(new Event("visibilitychange"))',
+  ]) {
+    const resultTop = await evaluate(
+      'document.querySelector(".station-list").getBoundingClientRect().top',
+    );
+    await evaluate(`audit.updateMessages = []; delete audit.releaseStations; ${trigger}`);
+    await waitFor("audit.releaseStations");
+    await assertUpdateFeedback(true, "");
+    assert.ok(
+      await evaluate(
+        'audit.savedError === document.querySelector(".status-strip.error") && audit.savedError.textContent === audit.savedErrorText',
+      ),
+    );
+    assert.equal(
+      await evaluate('document.querySelector(".station-list").getBoundingClientRect().top'),
+      resultTop,
+    );
+    await evaluate("audit.releaseStations()");
+    await assertUpdateFeedback(false, "");
+    assert.deepEqual(
+      await evaluate("audit.updateMessages.filter(Boolean)"),
+      [],
+      "background failures must not announce another outcome",
+    );
+    assert.equal(
+      await evaluate('document.querySelector(".station-list").getBoundingClientRect().top'),
+      resultTop,
+    );
+    assert.ok(
+      await evaluate('document.activeElement === document.querySelector(".masthead .refresh-btn")'),
+    );
+  }
+  assert.deepEqual(await evaluate("audit.errorMutations"), []);
+  await evaluate(
+    "audit.errorObserver.disconnect(); audit.statusObserver.disconnect(); audit.held = false",
   );
   await evaluate(
     'audit.fail = false; audit.available = 4; document.querySelector(".refresh-btn").click()',
   );
   await waitFor('document.querySelector(".summary-line").textContent.includes("40,000")');
+  await assertUpdateFeedback(false);
+  assert.equal(await evaluate('!!document.querySelector(".status-strip.error")'), false);
   assert.equal(
     await evaluate("audit.areaRequests"),
     1,
     "station refresh must not refetch area names",
   );
+  // A new background outage announces stale data once, then stays quiet until recovery.
+  const backgroundTriggers = [
+    "audit.refresh()",
+    'document.dispatchEvent(new Event("visibilitychange"))',
+  ];
+  const staleDataMessage = `${failedUpdateMessage}；目前顯示上次成功更新的資料。`;
+  await evaluate(`(() => {
+    const status = document.querySelector(".masthead [role=status]");
+    audit.statusObserver = new MutationObserver(() => audit.updateMessages.push(status.textContent.trim()));
+    audit.statusObserver.observe(status, { childList: true, characterData: true, subtree: true });
+    audit.held = true;
+  })()`);
+  const backgroundRefresh = async (trigger, expectedMessage) => {
+    await evaluate(`audit.updateMessages = []; delete audit.releaseStations; ${trigger}`);
+    await waitFor("audit.releaseStations");
+    await assertUpdateFeedback(true, "");
+    await evaluate("audit.releaseStations()");
+    await assertUpdateFeedback(false, expectedMessage);
+  };
+  for (const trigger of backgroundTriggers) {
+    await evaluate("audit.fail = true");
+    await backgroundRefresh(trigger, staleDataMessage);
+    assert.deepEqual(
+      await evaluate("audit.updateMessages.filter(Boolean)"),
+      [staleDataMessage],
+      "the first background failure must announce that cached data is being shown",
+    );
+    assert.equal(
+      await evaluate('document.querySelectorAll(".station-list .station-card").length'),
+      10,
+    );
+    await evaluate(`(() => {
+      audit.savedError = document.querySelector(".status-strip.error");
+      audit.savedErrorText = audit.savedError.textContent;
+      audit.savedResultTop = document.querySelector(".station-list").getBoundingClientRect().top;
+    })()`);
+    for (const repeat of backgroundTriggers) {
+      await backgroundRefresh(repeat, "");
+      assert.deepEqual(
+        await evaluate("audit.updateMessages.filter(Boolean)"),
+        [],
+        "subsequent background failures must not repeat the stale-data warning",
+      );
+      assert.ok(
+        await evaluate(
+          'audit.savedError === document.querySelector(".status-strip.error") && audit.savedError.textContent === audit.savedErrorText',
+        ),
+      );
+      assert.equal(
+        await evaluate('document.querySelector(".station-list").getBoundingClientRect().top'),
+        await evaluate("audit.savedResultTop"),
+      );
+    }
+    await evaluate("audit.fail = false");
+    await backgroundRefresh(trigger, "");
+    assert.deepEqual(await evaluate("audit.updateMessages.filter(Boolean)"), []);
+    assert.equal(await evaluate('!!document.querySelector(".status-strip.error")'), false);
+  }
+  await evaluate("audit.statusObserver.disconnect(); audit.held = false");
   // No GPS preserves nationwide browsing; a failed first request can be retried.
   await cdp("Page.navigate", { url: `${targetUrl}?denied&failure&fallback` });
   await waitFor('document.querySelector(".status-strip.error")');
+  await assertUpdateFeedback(false, failedUpdateMessage);
   assert.equal(await evaluate('document.querySelectorAll(".station-card").length'), 0);
   await evaluate(
-    'audit.fail = false; document.querySelector(".status-strip .refresh-btn").click()',
+    'audit.fail = false; audit.held = true; document.querySelector(".status-strip .refresh-btn").click()',
   );
+  await waitFor("audit.releaseStations");
+  await assertUpdateFeedback(true);
+  assert.ok(await evaluate('!!document.querySelector(".status-strip.error")'));
+  assert.equal(
+    await evaluate(
+      'document.querySelector(".status-strip .refresh-btn").getAttribute("aria-disabled")',
+    ),
+    "true",
+  );
+  await evaluate("audit.held = false; audit.releaseStations()");
   await waitFor('document.querySelectorAll(".station-list .station-card").length === 40');
+  await assertUpdateFeedback(false);
   assert.equal(await evaluate('document.querySelectorAll(".station-distance").length'), 0);
   assert.equal(await evaluate("audit.mapCreates"), 0);
   await evaluate('document.querySelector(".map-toggle").click()');
@@ -382,8 +730,12 @@ try {
   await cdp("Page.navigate", { url: `${targetUrl}?area-retry` });
   await waitFor('document.querySelectorAll(".station-list .station-card").length === 10');
   assert.equal(await evaluate("audit.areaRequests"), 1);
-  await evaluate("audit.areaFail = false; audit.refresh()");
+  await evaluate("audit.areaFail = false; audit.held = true; audit.refresh()");
   await waitFor("audit.areaRequests === 2");
+  await assertUpdateFeedback(true, "");
+  await evaluate("audit.held = false; audit.releaseStations()");
+  await assertUpdateFeedback(false, "");
+  assert.equal(await evaluate("!!audit.releaseAreas"), true, "area metadata remains independent");
   await evaluate('document.querySelector(".refresh-btn").click()');
   assert.equal(await evaluate("audit.areaRequests"), 2, "pending metadata must be deduplicated");
   await evaluate("audit.releaseAreas()");
@@ -461,7 +813,7 @@ try {
   });
   assert.deepEqual(errors, [], "browser runtime errors");
   console.log(
-    "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, retained map/tiles/view/selection, refresh, location, cancellation, failure recovery, online/offline notifications.",
+    "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, retained map/tiles/view/selection, refresh progress/button feedback, reduced motion, location, cancellation, failure recovery, online/offline notifications.",
   );
 } catch (error) {
   console.error(

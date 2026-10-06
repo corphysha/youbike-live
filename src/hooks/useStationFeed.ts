@@ -4,10 +4,19 @@ import type { Area, StationView } from "../lib/schema";
 
 const REFRESH_MS = 60_000;
 export type LoadState = "loading" | "ready" | "error";
+type RefreshMode = "foreground" | "background";
+interface UpdateState {
+  mode: RefreshMode | "idle";
+  statusMessage: string;
+}
 
 /** Keep the last successful feed during failures; refresh only while the page is visible. */
 export function useStationFeed() {
   const [state, setState] = useState<LoadState>("loading");
+  const [updateState, setUpdateState] = useState<UpdateState>({
+    mode: "foreground",
+    statusMessage: "站點資料更新中",
+  });
   const [errorMsg, setErrorMsg] = useState("");
   const [stations, setStations] = useState<StationView[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -15,6 +24,8 @@ export function useStationFeed() {
   const [now, setNow] = useState(() => new Date());
 
   const inFlight = useRef<AbortController | null>(null);
+  // Automatic retries announce a new outage once; only success resets this flag.
+  const hasFeedError = useRef(false);
 
   const areaInFlight = useRef<AbortController | null>(null);
   const areasLoaded = useRef(false);
@@ -34,33 +45,58 @@ export function useStationFeed() {
     }
   }, []);
 
-  const load = useCallback(async () => {
-    if (inFlight.current) return;
-    const controller = new AbortController();
-    inFlight.current = controller;
-    // Retry missing area metadata independently; never hold up the live feed.
-    void loadAreas();
-    try {
-      const s = await fetchStations(controller.signal);
-      if (controller.signal.aborted) return;
-      setStations(s);
-      setLastFetch(new Date());
-      setState("ready");
-      setErrorMsg("");
-    } catch (err) {
-      if (controller.signal.aborted) return;
-      setErrorMsg(err instanceof FeedError ? err.message : "載入失敗，請稍後再試");
-      setState((prev) => (prev === "ready" ? "ready" : "error"));
-    } finally {
-      if (inFlight.current === controller) inFlight.current = null;
-    }
-  }, [loadAreas]);
+  const load = useCallback(
+    async (mode: RefreshMode) => {
+      if (inFlight.current) return;
+      const controller = new AbortController();
+      inFlight.current = controller;
+      setUpdateState({
+        mode,
+        statusMessage: mode === "foreground" ? "站點資料更新中" : "",
+      });
+      let statusMessage = "";
+      setState((prev) => (prev === "error" ? "loading" : prev));
+      // Retry missing area metadata independently; never hold up the live feed.
+      void loadAreas();
+      try {
+        const s = await fetchStations(controller.signal);
+        if (controller.signal.aborted) return;
+        setStations(s);
+        setLastFetch(new Date());
+        setState("ready");
+        setErrorMsg("");
+        hasFeedError.current = false;
+        if (mode === "foreground") statusMessage = "站點資料已更新";
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        const message = err instanceof FeedError ? err.message : "載入失敗，請稍後再試";
+        setErrorMsg(message);
+        if (mode === "foreground") {
+          statusMessage = `更新失敗：${message}`;
+        } else if (!hasFeedError.current) {
+          statusMessage = `更新失敗：${message}；目前顯示上次成功更新的資料。`;
+        }
+        hasFeedError.current = true;
+        setState((prev) => (prev === "ready" ? "ready" : "error"));
+      } finally {
+        if (inFlight.current === controller) {
+          inFlight.current = null;
+          setUpdateState({ mode: "idle", statusMessage });
+        }
+      }
+    },
+    [loadAreas],
+  );
+
+  // UI callbacks accept no mode, so event handlers cannot pass a MouseEvent into load.
+  const refresh = useCallback(() => load("foreground"), [load]);
 
   useEffect(() => {
-    void load();
+    void load("foreground");
     return () => {
       inFlight.current?.abort();
       inFlight.current = null;
+      setUpdateState({ mode: "idle", statusMessage: "" });
       areaInFlight.current?.abort();
       areaInFlight.current = null;
     };
@@ -69,10 +105,10 @@ export function useStationFeed() {
   // refresh while visible
   useEffect(() => {
     const tick = setInterval(() => {
-      if (document.visibilityState === "visible") void load();
+      if (document.visibilityState === "visible") void load("background");
     }, REFRESH_MS);
     const onVis = () => {
-      if (document.visibilityState === "visible") void load();
+      if (document.visibilityState === "visible") void load("background");
     };
     document.addEventListener("visibilitychange", onVis);
     return () => {
@@ -87,5 +123,15 @@ export function useStationFeed() {
     return () => clearInterval(t);
   }, []);
 
-  return { state, errorMsg, stations, areas, lastFetch, now, load };
+  return {
+    state,
+    isUpdating: updateState.mode !== "idle",
+    updateMessage: updateState.statusMessage,
+    errorMsg,
+    stations,
+    areas,
+    lastFetch,
+    now,
+    refresh,
+  };
 }
