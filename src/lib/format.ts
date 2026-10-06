@@ -21,6 +21,28 @@ export const LEVEL_LABEL: Record<AvailabilityLevel, string> = {
   offline: "暫停營運",
 };
 
+export interface BikeCounts {
+  /** YouBike 2.0 (plus any remaining 1.0) pedal bikes */
+  regular: number;
+  /** YouBike 2.0E electric-assist bikes */
+  electric: number;
+}
+
+/**
+ * Split the rentable total by bike type. Regular bikes are derived from the total so the two
+ * always add up to the "可借" count, even when the feed omits or under-reports the detail.
+ */
+export function bikeCounts(station: { available: number; detail: { eyb: number } }): BikeCounts {
+  const electric = Math.min(station.detail.eyb, station.available);
+  return { regular: station.available - electric, electric };
+}
+
+/** "可借 5 輛（一般車 3、電輔車 2）" for titles and notifications */
+export function bikeSummary(station: { available: number; detail: { eyb: number } }): string {
+  const { regular, electric } = bikeCounts(station);
+  return `可借 ${station.available} 輛（一般車 ${regular}、電輔車 ${electric}）`;
+}
+
 export function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }

@@ -9,6 +9,7 @@ interface Props {
   shown: StationView[];
   stationCount: number;
   totalAvailable: number;
+  totalElectric: number;
   totalEmpty: number;
   remainingCount: number;
   favorites: string[];
@@ -24,6 +25,7 @@ export function StationResults({
   shown,
   stationCount,
   totalAvailable,
+  totalElectric,
   totalEmpty,
   remainingCount,
   favorites,
@@ -38,7 +40,11 @@ export function StationResults({
     <>
       <div className="summary-line" aria-live="polite">
         <span>{stationCount.toLocaleString()} 個站點</span>
-        <span>可借 {totalAvailable.toLocaleString()} 輛</span>
+        <span>
+          可借 {totalAvailable.toLocaleString()} 輛（一般車{" "}
+          {(totalAvailable - totalElectric).toLocaleString()}、電輔車{" "}
+          {totalElectric.toLocaleString()}）
+        </span>
         <span>空位 {totalEmpty.toLocaleString()} 格</span>
       </div>
 

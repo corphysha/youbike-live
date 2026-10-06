@@ -1,5 +1,6 @@
 import { NavigationArrow, Star } from "@phosphor-icons/react";
 import { formatDistance } from "../../lib/distance";
+import { bikeCounts } from "../../lib/format";
 import { navigateToStation } from "../../lib/navigation";
 import type { StationView } from "../../lib/schema";
 import { TripButtons } from "../TripButtons";
@@ -21,6 +22,8 @@ export function SelectedStation({
   onToggleFavorite,
   onToggleTripStation,
 }: Props) {
+  const active = station.status === 1;
+  const bikes = bikeCounts(station);
   return (
     <section className="selected-station" aria-live="polite" aria-label="地圖所選站點">
       <div className="selected-station-heading">
@@ -45,12 +48,16 @@ export function SelectedStation({
       </div>
       <div className="selected-metrics">
         <div>
-          <span>可借車輛</span>
-          <strong className="available">{station.status === 1 ? station.available : "—"}</strong>
+          <span>一般車</span>
+          <strong className="available">{active ? bikes.regular : "—"}</strong>
+        </div>
+        <div>
+          <span>電輔車</span>
+          <strong className="electric">{active ? bikes.electric : "—"}</strong>
         </div>
         <div>
           <span>剩餘空位</span>
-          <strong>{station.status === 1 ? station.empty : "—"}</strong>
+          <strong>{active ? station.empty : "—"}</strong>
         </div>
         {distanceMeters !== null && (
           <div>

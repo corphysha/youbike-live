@@ -1,4 +1,5 @@
 import { type GeoPoint, getDistanceMeters } from "./distance";
+import { bikeCounts } from "./format";
 import type { Area, StationView } from "./schema";
 
 interface StationFilters {
@@ -55,10 +56,11 @@ export function getStationTotals(stations: StationView[]) {
     (totals, station) => {
       if (station.status === 1) {
         totals.totalAvailable += station.available;
+        totals.totalElectric += bikeCounts(station).electric;
         totals.totalEmpty += station.empty;
       }
       return totals;
     },
-    { totalAvailable: 0, totalEmpty: 0 },
+    { totalAvailable: 0, totalElectric: 0, totalEmpty: 0 },
   );
 }

@@ -27,7 +27,14 @@ const station: StationView = {
 
 const stations: StationView[] = [
   station,
-  { ...station, id: "500200002", areaCode: "01", name: "板橋車站", lat: 25.013 },
+  {
+    ...station,
+    id: "500200002",
+    areaCode: "01",
+    name: "板橋車站",
+    lat: 25.013,
+    detail: { yb1: 0, yb2: 1, eyb: 2 },
+  },
   { ...station, id: "500100003", name: "停用站", status: 0, lat: 25.06 },
 ];
 
@@ -125,6 +132,10 @@ test("area options use official order, omit unused areas and fall back to missin
 });
 
 test("summary counts only active stations and handles empty results", () => {
-  expect(getStationTotals(stations)).toEqual({ totalAvailable: 6, totalEmpty: 14 });
-  expect(getStationTotals([])).toEqual({ totalAvailable: 0, totalEmpty: 0 });
+  expect(getStationTotals(stations)).toEqual({
+    totalAvailable: 6,
+    totalElectric: 2,
+    totalEmpty: 14,
+  });
+  expect(getStationTotals([])).toEqual({ totalAvailable: 0, totalElectric: 0, totalEmpty: 0 });
 });

@@ -33,13 +33,13 @@ test("saving the same start/end pair twice unsaves it; reversed pairs are distin
 
 test("route message reports start bikes and end docks in one notification", () => {
   const route = { id: routeId("A", "B"), startId: "A", endId: "B" };
-  const start = station("A");
+  const start = station("A", { detail: { yb1: 0, yb2: 5, eyb: 2 } });
   const end = station("B", { lat: 25.06, empty: 0 });
   const nearEnd = station("C", { lat: 25.0603, empty: 9 });
 
   expect(buildRouteMessage(route, [start, end, nearEnd])).toEqual({
     title: "路線：站點 A → 站點 B",
-    body: "起點可借 7 輛\n終點空位 0 格，附近「站點 C」空位 9 格（約 33 公尺）",
+    body: "起點可借 7 輛（一般車 5、電輔車 2）\n終點空位 0 格，附近「站點 C」空位 9 格（約 33 公尺）",
   });
 });
 

@@ -1,6 +1,7 @@
 import type * as Leaflet from "leaflet";
 import { useEffect, useRef, useState } from "react";
 import type { GeoPoint } from "../lib/distance";
+import { bikeSummary } from "../lib/format";
 import type { StationView } from "../lib/schema";
 
 interface Props {
@@ -169,7 +170,7 @@ export function StationMap({ active, stations, selectedId, userLocation, onSelec
       for (; index < end; index += 1) {
         const station = stations[index];
         if (!station) continue;
-        const title = `${station.name}，可借 ${station.available} 輛，空位 ${station.empty} 格`;
+        const title = `${station.name}，${bikeSummary(station)}，空位 ${station.empty} 格`;
         let marker = markers.get(station.id);
         if (!marker) {
           marker = leaflet.marker([station.lat, station.lng], {

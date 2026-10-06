@@ -79,14 +79,16 @@ test("re-entering after leaving respects the cooldown", () => {
 test("messages report bikes and docks, with an alternative when the trip station lacks them", () => {
   expect(buildArrivalMessage({ station: home, role: "favorite" })).toEqual({
     title: "已到達最愛站點：站點 H",
-    body: "可借 4 輛 · 空位 6 格",
+    body: "可借 4 輛（一般車 4、電輔車 0） · 空位 6 格",
   });
 
   const full = station("F", { empty: 0, available: 10 });
   const nearby = station("N", { lat: 25.0405, empty: 3 });
   const message = buildArrivalMessage({ station: full, role: "end" }, [full, nearby]);
   expect(message.title).toBe("已到達終點：站點 F");
-  expect(message.body).toStartWith("空位 0 格 · 可借 10 輛。附近「站點 N」空位 3 格");
+  expect(message.body).toStartWith(
+    "空位 0 格 · 可借 10 輛（一般車 10、電輔車 0）。附近「站點 N」空位 3 格",
+  );
 
   expect(buildArrivalMessage({ station: home, role: "start" }, [], { arrived: false }).title).toBe(
     "起點：站點 H",
