@@ -24,6 +24,8 @@ export function useStationFeed() {
   const [now, setNow] = useState(() => new Date());
 
   const inFlight = useRef<AbortController | null>(null);
+  // Automatic retries announce a new outage once; only success resets this flag.
+  const hasFeedError = useRef(false);
 
   const areaInFlight = useRef<AbortController | null>(null);
   const areasLoaded = useRef(false);
@@ -63,12 +65,18 @@ export function useStationFeed() {
         setLastFetch(new Date());
         setState("ready");
         setErrorMsg("");
+        hasFeedError.current = false;
         if (mode === "foreground") statusMessage = "站點資料已更新";
       } catch (err) {
         if (controller.signal.aborted) return;
         const message = err instanceof FeedError ? err.message : "載入失敗，請稍後再試";
         setErrorMsg(message);
-        if (mode === "foreground") statusMessage = `更新失敗：${message}`;
+        if (mode === "foreground") {
+          statusMessage = `更新失敗：${message}`;
+        } else if (!hasFeedError.current) {
+          statusMessage = `更新失敗：${message}；目前顯示上次成功更新的資料。`;
+        }
+        hasFeedError.current = true;
         setState((prev) => (prev === "ready" ? "ready" : "error"));
       } finally {
         if (inFlight.current === controller) {

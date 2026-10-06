@@ -601,6 +601,65 @@ try {
     1,
     "station refresh must not refetch area names",
   );
+  // A new background outage announces stale data once, then stays quiet until recovery.
+  const backgroundTriggers = [
+    "audit.refresh()",
+    'document.dispatchEvent(new Event("visibilitychange"))',
+  ];
+  const staleDataMessage = `${failedUpdateMessage}；目前顯示上次成功更新的資料。`;
+  await evaluate(`(() => {
+    const status = document.querySelector(".masthead [role=status]");
+    audit.statusObserver = new MutationObserver(() => audit.updateMessages.push(status.textContent.trim()));
+    audit.statusObserver.observe(status, { childList: true, characterData: true, subtree: true });
+    audit.held = true;
+  })()`);
+  const backgroundRefresh = async (trigger, expectedMessage) => {
+    await evaluate(`audit.updateMessages = []; delete audit.releaseStations; ${trigger}`);
+    await waitFor("audit.releaseStations");
+    await assertUpdateFeedback(true, "");
+    await evaluate("audit.releaseStations()");
+    await assertUpdateFeedback(false, expectedMessage);
+  };
+  for (const trigger of backgroundTriggers) {
+    await evaluate("audit.fail = true");
+    await backgroundRefresh(trigger, staleDataMessage);
+    assert.deepEqual(
+      await evaluate("audit.updateMessages.filter(Boolean)"),
+      [staleDataMessage],
+      "the first background failure must announce that cached data is being shown",
+    );
+    assert.equal(
+      await evaluate('document.querySelectorAll(".station-list .station-card").length'),
+      10,
+    );
+    await evaluate(`(() => {
+      audit.savedError = document.querySelector(".status-strip.error");
+      audit.savedErrorText = audit.savedError.textContent;
+      audit.savedResultTop = document.querySelector(".station-list").getBoundingClientRect().top;
+    })()`);
+    for (const repeat of backgroundTriggers) {
+      await backgroundRefresh(repeat, "");
+      assert.deepEqual(
+        await evaluate("audit.updateMessages.filter(Boolean)"),
+        [],
+        "subsequent background failures must not repeat the stale-data warning",
+      );
+      assert.ok(
+        await evaluate(
+          'audit.savedError === document.querySelector(".status-strip.error") && audit.savedError.textContent === audit.savedErrorText',
+        ),
+      );
+      assert.equal(
+        await evaluate('document.querySelector(".station-list").getBoundingClientRect().top'),
+        await evaluate("audit.savedResultTop"),
+      );
+    }
+    await evaluate("audit.fail = false");
+    await backgroundRefresh(trigger, "");
+    assert.deepEqual(await evaluate("audit.updateMessages.filter(Boolean)"), []);
+    assert.equal(await evaluate('!!document.querySelector(".status-strip.error")'), false);
+  }
+  await evaluate("audit.statusObserver.disconnect(); audit.held = false");
   // No GPS preserves nationwide browsing; a failed first request can be retried.
   await cdp("Page.navigate", { url: `${targetUrl}?denied&failure&fallback` });
   await waitFor('document.querySelector(".status-strip.error")');
