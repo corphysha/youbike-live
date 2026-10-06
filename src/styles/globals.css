@@ -11,7 +11,7 @@
   --accent-ink: #231f20;
   --good: #14652f;
   --good-bg: #e7f3ea;
-  --electric: #1d5fa8;
+  --electric: #b84a00;
   --warn: #9a6b00;
   --warn-bg: #fdf3d7;
   --bad: #b3372e;
@@ -39,7 +39,7 @@
   --line-strong: #52594d;
   --good: #8bdda0;
   --good-bg: #1f3827;
-  --electric: #8cbcff;
+  --electric: #fb923c;
   --warn: #f3ca63;
   --warn-bg: #413618;
   --bad: #ff9a8f;
@@ -75,7 +75,7 @@ html {
     --line-strong: #52594d;
     --good: #8bdda0;
     --good-bg: #1f3827;
-    --electric: #8cbcff;
+    --electric: #fb923c;
     --warn: #f3ca63;
     --warn-bg: #413618;
     --bad: #ff9a8f;
