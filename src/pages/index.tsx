@@ -117,6 +117,7 @@ export default function Home() {
               shown={search.shown}
               stationCount={search.filtered.length}
               totalAvailable={search.totalAvailable}
+              totalElectric={search.totalElectric}
               totalEmpty={search.totalEmpty}
               remainingCount={search.remainingCount}
               favorites={favorites}

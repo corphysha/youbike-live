@@ -1,5 +1,6 @@
 import { ArrowsDownUp, BellRinging, NavigationArrow, Star, Trash, X } from "@phosphor-icons/react";
 import { formatDistance, getDistanceMeters } from "../../lib/distance";
+import { bikeCounts } from "../../lib/format";
 import { navigateToStation } from "../../lib/navigation";
 import { routeId, type SavedRoute } from "../../lib/routes";
 import type { StationView } from "../../lib/schema";
@@ -31,6 +32,12 @@ const BADGE_CLASS: Record<TripCheck, string> = {
   missing: "offline",
 };
 
+/** Compact "一般 3 · 電輔 2" for pills and alternative rows. */
+function bikeShort(station: StationView): string {
+  const { regular, electric } = bikeCounts(station);
+  return `一般 ${regular} · 電輔 ${electric}`;
+}
+
 function TripLeg({
   leg: role,
   stationId,
@@ -55,16 +62,21 @@ function TripLeg({
   const check = checkTripStation(station, role);
   const alternatives = station && check !== "ok" ? findAlternatives(stations, station, role) : [];
   const isActive = station?.status === 1;
+  const bikes = station ? bikeCounts(station) : null;
 
   return (
     <div className="trip-leg">
       <span className="trip-role">{roleLabel}</span>
       <h3>{station?.name ?? `站點 ${stationId}`}</h3>
-      {station && isActive && (
+      {station && bikes && isActive && (
         <div className="trip-metrics">
           <div className={role === "start" ? "primary" : undefined}>
-            <span>可借車輛</span>
-            <strong className="available">{station.available}</strong>
+            <span>一般車</span>
+            <strong className="available">{bikes.regular}</strong>
+          </div>
+          <div className={role === "start" ? "primary" : undefined}>
+            <span>電輔車</span>
+            <strong className="electric">{bikes.electric}</strong>
           </div>
           <div className={role === "end" ? "primary" : undefined}>
             <span>剩餘空位</span>
@@ -89,7 +101,7 @@ function TripLeg({
                 <li key={alt.id}>
                   <span className="trip-alt-name">{alt.name}</span>
                   <span className="trip-alt-count">
-                    {role === "start" ? `可借 ${alt.available}` : `空位 ${alt.empty}`}
+                    {role === "start" ? bikeShort(alt) : `空位 ${alt.empty}`}
                   </span>
                   <span className="muted">{formatDistance(distance)}</span>
                   <button
@@ -150,7 +162,7 @@ function SavedRoutes({
                 </span>
                 <span className="route-counts">
                   <span className={`route-count ${BADGE_CLASS[startCheck]}`}>
-                    可借 {start?.status === 1 ? start.available : "—"}
+                    {start?.status === 1 ? bikeShort(start) : "可借 —"}
                   </span>
                   <span className={`route-count ${BADGE_CLASS[endCheck]}`}>
                     空位 {end?.status === 1 ? end.empty : "—"}

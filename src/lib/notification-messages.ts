@@ -1,4 +1,5 @@
 import type { ArrivalRole, ArrivalTarget } from "./arrival";
+import { bikeSummary } from "./format";
 import type { SavedRoute } from "./routes";
 import type { StationView } from "./schema";
 import { checkTripStation, findAlternatives } from "./trip";
@@ -29,7 +30,7 @@ export function buildArrivalMessage(
   const title = `${(arrived ? ARRIVED_LABEL : STATUS_LABEL)[role]}：${station.name}`;
   if (station.status !== 1) return { title, body: "此站暫停營運，請改用附近站點。" };
 
-  const bikes = `可借 ${station.available} 輛`;
+  const bikes = bikeSummary(station);
   const docks = `空位 ${station.empty} 格`;
   const counts = role === "end" ? `${docks} · ${bikes}` : `${bikes} · ${docks}`;
   const lacking = role === "end" ? station.empty === 0 : station.available === 0;
@@ -38,7 +39,7 @@ export function buildArrivalMessage(
   const [nearest] = findAlternatives(stations, station, role, { limit: 1 });
   const hint = nearest
     ? `附近「${nearest.station.name}」${
-        role === "end" ? `空位 ${nearest.station.empty} 格` : `可借 ${nearest.station.available} 輛`
+        role === "end" ? `空位 ${nearest.station.empty} 格` : bikeSummary(nearest.station)
       }（約 ${Math.round(nearest.distance)} 公尺）`
     : "500 公尺內沒有其他可用站點";
   return { title, body: `${counts}。${hint}` };
@@ -55,13 +56,13 @@ function legSummary(
   if (check === "offline") return `${label}暫停營運`;
 
   const count =
-    leg === "start" ? `${label}可借 ${station.available} 輛` : `${label}空位 ${station.empty} 格`;
+    leg === "start" ? `${label}${bikeSummary(station)}` : `${label}空位 ${station.empty} 格`;
   if (check !== "none") return count;
 
   const [nearest] = findAlternatives(stations, station, leg, { limit: 1 });
   if (!nearest) return `${count}（500 公尺內無替代站）`;
   const altCount =
-    leg === "start" ? `可借 ${nearest.station.available} 輛` : `空位 ${nearest.station.empty} 格`;
+    leg === "start" ? bikeSummary(nearest.station) : `空位 ${nearest.station.empty} 格`;
   return `${count}，附近「${nearest.station.name}」${altCount}（約 ${Math.round(nearest.distance)} 公尺）`;
 }
 

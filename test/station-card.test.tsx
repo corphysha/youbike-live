@@ -53,3 +53,21 @@ test("station cards offer start and end trip actions when enabled", () => {
   expect(markup).toContain('aria-label="取消起點：台北車站"');
   expect(markup).toContain('aria-label="設為終點：台北車站"');
 });
+
+test("station cards show regular and electric bikes separately", () => {
+  const markup = renderToStaticMarkup(
+    <StationCard
+      station={{ ...station, available: 5, detail: { yb1: 0, yb2: 3, eyb: 2 } }}
+      isFav={false}
+      now={new Date("2026-10-03T12:01:00Z")}
+      onToggleFav={() => {}}
+      onNavigateToStation={() => {}}
+    />,
+  );
+
+  expect(markup).toContain("共可借 5 輛");
+  expect(markup).toMatch(/num-regular"><div class="num">3<\/div>/);
+  expect(markup).toMatch(/num-electric"><div class="num">2<\/div>/);
+  expect(markup).toContain("一般車");
+  expect(markup).toContain("電輔車");
+});

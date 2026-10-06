@@ -11,6 +11,7 @@
   --accent-ink: #231f20;
   --good: #14652f;
   --good-bg: #e7f3ea;
+  --electric: #1d5fa8;
   --warn: #9a6b00;
   --warn-bg: #fdf3d7;
   --bad: #b3372e;
@@ -38,6 +39,7 @@
   --line-strong: #52594d;
   --good: #8bdda0;
   --good-bg: #1f3827;
+  --electric: #8cbcff;
   --warn: #f3ca63;
   --warn-bg: #413618;
   --bad: #ff9a8f;
@@ -73,6 +75,7 @@ html {
     --line-strong: #52594d;
     --good: #8bdda0;
     --good-bg: #1f3827;
+    --electric: #8cbcff;
     --warn: #f3ca63;
     --warn-bg: #413618;
     --bad: #ff9a8f;
@@ -474,12 +477,34 @@ a {
   letter-spacing: 0.04em;
 }
 
-.num-available .num {
+.bike-split {
+  display: flex;
+  gap: 10px;
+}
+
+.num-block .num-label svg {
+  vertical-align: -1px;
+  margin-right: 2px;
+}
+
+.num-regular .num {
   color: var(--good);
+}
+
+.num-electric .num {
+  color: var(--electric);
+}
+
+.num-electric .num-label {
+  color: var(--electric);
 }
 
 .num-empty .num {
   color: var(--ink-2);
+}
+
+.num-block.zero .num {
+  color: var(--ink-3);
 }
 
 .dock-gauge {
@@ -1012,6 +1037,10 @@ a {
   color: var(--good);
 }
 
+.selected-metrics strong.electric {
+  color: var(--electric);
+}
+
 .selected-nav-button {
   display: inline-flex;
   align-items: center;
@@ -1268,6 +1297,10 @@ a {
 
 .trip-metrics strong.available {
   color: var(--good);
+}
+
+.trip-metrics strong.electric {
+  color: var(--electric);
 }
 
 .trip-alternatives {

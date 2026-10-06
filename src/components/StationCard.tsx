@@ -1,6 +1,6 @@
-import { Lightning, NavigationArrow, Star } from "@phosphor-icons/react";
+import { Bicycle, Lightning, NavigationArrow, Star } from "@phosphor-icons/react";
 import { formatDistance } from "../lib/distance";
-import { ageMinutes, availabilityLevel, LEVEL_LABEL, shortTime } from "../lib/format";
+import { ageMinutes, availabilityLevel, bikeCounts, LEVEL_LABEL, shortTime } from "../lib/format";
 import type { StationView } from "../lib/schema";
 import { TripButtons } from "./TripButtons";
 
@@ -27,7 +27,7 @@ export function StationCard({
 }: Props) {
   const level = availabilityLevel(station.available, station.empty, station.status);
   const age = ageMinutes(station.updatedAt, now);
-  const detail = station.detail;
+  const bikes = bikeCounts(station);
 
   return (
     <li className={`station-card${isFav ? " fav" : ""}`}>
@@ -42,11 +42,6 @@ export function StationCard({
           {isFav ? <Star size={18} weight="fill" /> : <Star size={18} />}
         </button>
         <span className="name-text">{station.name}</span>
-        {detail.eyb > 0 && (
-          <span title="有 YouBike 2.0E 電輔車" style={{ color: "var(--warn)", flex: "none" }}>
-            <Lightning size={14} weight="fill" />
-          </span>
-        )}
         <button
           type="button"
           className="station-nav-button"
@@ -72,9 +67,21 @@ export function StationCard({
           </span>
         ) : (
           <>
-            <div className="num-block num-available">
-              <div className="num">{station.available}</div>
-              <div className="num-label">可借</div>
+            <div className="bike-split">
+              <div className={`num-block num-regular${bikes.regular === 0 ? " zero" : ""}`}>
+                <div className="num">{bikes.regular}</div>
+                <div className="num-label">
+                  <Bicycle size={12} weight="bold" aria-hidden="true" />
+                  一般車
+                </div>
+              </div>
+              <div className={`num-block num-electric${bikes.electric === 0 ? " zero" : ""}`}>
+                <div className="num">{bikes.electric}</div>
+                <div className="num-label">
+                  <Lightning size={12} weight="fill" aria-hidden="true" />
+                  電輔車
+                </div>
+              </div>
             </div>
             <div className="dock-gauge" aria-hidden="true">
               <div className="fill" style={{ height: `${Math.round(station.dockRatio * 100)}%` }} />
@@ -92,10 +99,7 @@ export function StationCard({
           <span className="state-dot" />
           {LEVEL_LABEL[level]}
         </span>
-        <span>
-          2.0 {detail.yb2} · 2.0E {detail.eyb}
-          {detail.yb1 > 0 ? ` · 1.0 ${detail.yb1}` : ""}
-        </span>
+        {level !== "offline" && <span>共可借 {station.available} 輛</span>}
         <span className="muted">更新 {shortTime(station.updatedAt, now)}</span>
         {age !== null && age >= 20 && <span className="muted">（{age} 分鐘前）</span>}
         {distanceMeters !== undefined && (
