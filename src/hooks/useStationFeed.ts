@@ -8,6 +8,7 @@ export type LoadState = "loading" | "ready" | "error";
 /** Keep the last successful feed during failures; refresh only while the page is visible. */
 export function useStationFeed() {
   const [state, setState] = useState<LoadState>("loading");
+  const [isUpdating, setIsUpdating] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [stations, setStations] = useState<StationView[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -38,6 +39,9 @@ export function useStationFeed() {
     if (inFlight.current) return;
     const controller = new AbortController();
     inFlight.current = controller;
+    setIsUpdating(true);
+    setErrorMsg("");
+    setState((prev) => (prev === "error" ? "loading" : prev));
     // Retry missing area metadata independently; never hold up the live feed.
     void loadAreas();
     try {
@@ -52,7 +56,10 @@ export function useStationFeed() {
       setErrorMsg(err instanceof FeedError ? err.message : "載入失敗，請稍後再試");
       setState((prev) => (prev === "ready" ? "ready" : "error"));
     } finally {
-      if (inFlight.current === controller) inFlight.current = null;
+      if (inFlight.current === controller) {
+        inFlight.current = null;
+        setIsUpdating(false);
+      }
     }
   }, [loadAreas]);
 
@@ -87,5 +94,5 @@ export function useStationFeed() {
     return () => clearInterval(t);
   }, []);
 
-  return { state, errorMsg, stations, areas, lastFetch, now, load };
+  return { state, isUpdating, errorMsg, stations, areas, lastFetch, now, load };
 }

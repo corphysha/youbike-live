@@ -3,6 +3,53 @@ import { setTimeout as delay } from "node:timers/promises";
 import { startBrowserAudit } from "./browser-audit.mjs";
 
 const { cdp, evaluate, targetUrl, close, waitFor, errors, on } = await startBrowserAudit();
+const assertUpdateFeedback = async (updating) => {
+  await waitFor(`document.querySelector(".masthead .refresh-btn")?.disabled === ${updating}`);
+  const feedback = await evaluate(`(() => {
+    const button = document.querySelector(".masthead .refresh-btn");
+    const progress = document.querySelector(".masthead progress");
+    const indicator = document.querySelector(".feed-progress-indicator");
+    const icon = button.querySelector("svg");
+    const label = [...button.querySelectorAll("span")].find(el => getComputedStyle(el).display !== "none");
+    return {
+      busy: button.getAttribute("aria-busy"),
+      label: label.textContent,
+      accessibleLabel: button.getAttribute("aria-label"),
+      spinning: icon.classList.contains("spin"),
+      iconAnimation: getComputedStyle(icon).animationName,
+      progress: !!progress,
+      indeterminate: !!progress && !progress.hasAttribute("value"),
+      progressName: progress?.getAttribute("aria-label"),
+      barHeight: indicator?.getBoundingClientRect().height,
+      barAnimation: indicator && getComputedStyle(indicator).animationName,
+      animated: !matchMedia("(prefers-reduced-motion: reduce)").matches,
+      status: document.querySelector(".masthead [role=status]").textContent.trim(),
+      overflow: document.documentElement.scrollWidth > innerWidth
+    };
+  })()`);
+  assert.equal(feedback.busy, String(updating));
+  assert.equal(feedback.spinning, updating);
+  assert.equal(feedback.progress, updating);
+  assert.equal(feedback.overflow, false, "refresh feedback must fit the viewport");
+  if (updating) {
+    assert.equal(feedback.label, "更新中");
+    assert.ok(feedback.accessibleLabel.includes("更新中"));
+    assert.equal(
+      feedback.indeterminate,
+      true,
+      "unknown download duration must not show a percentage",
+    );
+    assert.equal(feedback.progressName, "站點資料更新中");
+    assert.equal(feedback.status, "站點資料更新中");
+    assert.equal(feedback.barHeight, 3);
+    assert.equal(feedback.iconAnimation, feedback.animated ? "spin" : "none");
+    assert.equal(feedback.barAnimation, feedback.animated ? "feed-progress" : "none");
+  } else {
+    assert.ok(["更新", "重新整理"].includes(feedback.label));
+    assert.equal(feedback.iconAnimation, "none");
+    assert.equal(feedback.status, "");
+  }
+};
 try {
   await cdp("Emulation.setDeviceMetricsOverride", {
     width: 1024,
@@ -18,6 +65,7 @@ try {
     source: `
     window.audit = { stationRequests: 0, areaRequests: 0, fail: false, available: 3,
       lat: 25.0478, lng: 121.5319, denied: false, held: false };
+    if (location.search.includes("held")) audit.held = true;
     if (location.search.includes("denied")) audit.denied = true;
     if (location.search.includes("failure")) audit.fail = true;
     if (location.search.includes("fallback")) delete window.IntersectionObserver;
@@ -138,11 +186,31 @@ try {
       body: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
     });
   });
-  await cdp("Page.navigate", { url: targetUrl });
+  await cdp("Page.navigate", { url: `${targetUrl}?held` });
+  await waitFor("audit.releaseStations");
+  // First load shows honest progress and readable feedback on both desktop and small phones.
+  for (const width of [320, 390, 1024]) {
+    await cdp("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: width < 768,
+    });
+    await assertUpdateFeedback(true);
+  }
+  await cdp("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
+  });
+  await assertUpdateFeedback(true);
+  await cdp("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+  });
+  await evaluate("audit.held = false; audit.releaseStations()");
   await waitFor(
     'document.querySelectorAll(".station-list .station-card").length === 10',
     "nearest ten cards before area response",
   );
+  await assertUpdateFeedback(false);
   assert.equal(await evaluate("audit.areaRequests"), 1);
   assert.equal(await evaluate("audit.mapCreates"), 0, "saved collapsed map must stay unloaded");
   assert.equal(tileRequests, 0);
@@ -305,12 +373,37 @@ try {
 
   // Failed refresh retains usable data; concurrent clicks do not duplicate a pending request.
   const requests = await evaluate("audit.stationRequests");
+  const headerBefore = await evaluate(`(() => {
+    const button = document.querySelector(".masthead .refresh-btn").getBoundingClientRect();
+    return { width: button.width, height: document.querySelector(".masthead").offsetHeight };
+  })()`);
   await evaluate(
     'audit.held = true; audit.fail = true; document.querySelector(".refresh-btn").click(); document.querySelector(".refresh-btn").click()',
   );
   await waitFor(`audit.stationRequests === ${requests + 1}`);
+  await assertUpdateFeedback(true);
+  assert.deepEqual(
+    await evaluate(`(() => {
+      const button = document.querySelector(".masthead .refresh-btn").getBoundingClientRect();
+      return { width: button.width, height: document.querySelector(".masthead").offsetHeight };
+    })()`),
+    headerBefore,
+    "refresh feedback must not change header or button dimensions",
+  );
+  assert.equal(
+    await evaluate('document.querySelectorAll(".station-list .station-card").length'),
+    10,
+  );
+  await evaluate('document.querySelector(".refresh-btn").click(); audit.refresh()');
+  assert.equal(await evaluate("audit.stationRequests"), requests + 1);
   await evaluate("audit.releaseStations(); audit.held = false");
-  await delay(100);
+  await waitFor('document.querySelector(".status-strip.error")');
+  await assertUpdateFeedback(false);
+  assert.ok(
+    await evaluate(
+      'document.querySelector(".status-strip.error").textContent.includes("上次成功更新")',
+    ),
+  );
   assert.equal(
     await evaluate('document.querySelectorAll(".station-list .station-card").length'),
     10,
@@ -319,6 +412,8 @@ try {
     'audit.fail = false; audit.available = 4; document.querySelector(".refresh-btn").click()',
   );
   await waitFor('document.querySelector(".summary-line").textContent.includes("40,000")');
+  await assertUpdateFeedback(false);
+  assert.equal(await evaluate('!!document.querySelector(".status-strip.error")'), false);
   assert.equal(
     await evaluate("audit.areaRequests"),
     1,
@@ -329,9 +424,14 @@ try {
   await waitFor('document.querySelector(".status-strip.error")');
   assert.equal(await evaluate('document.querySelectorAll(".station-card").length'), 0);
   await evaluate(
-    'audit.fail = false; document.querySelector(".status-strip .refresh-btn").click()',
+    'audit.fail = false; audit.held = true; document.querySelector(".status-strip .refresh-btn").click()',
   );
+  await waitFor("audit.releaseStations");
+  await assertUpdateFeedback(true);
+  assert.ok(await evaluate('!!document.querySelector(".feed-loading")'));
+  await evaluate("audit.held = false; audit.releaseStations()");
   await waitFor('document.querySelectorAll(".station-list .station-card").length === 40');
+  await assertUpdateFeedback(false);
   assert.equal(await evaluate('document.querySelectorAll(".station-distance").length'), 0);
   assert.equal(await evaluate("audit.mapCreates"), 0);
   await evaluate('document.querySelector(".map-toggle").click()');
@@ -382,8 +482,12 @@ try {
   await cdp("Page.navigate", { url: `${targetUrl}?area-retry` });
   await waitFor('document.querySelectorAll(".station-list .station-card").length === 10');
   assert.equal(await evaluate("audit.areaRequests"), 1);
-  await evaluate("audit.areaFail = false; audit.refresh()");
+  await evaluate("audit.areaFail = false; audit.held = true; audit.refresh()");
   await waitFor("audit.areaRequests === 2");
+  await assertUpdateFeedback(true);
+  await evaluate("audit.held = false; audit.releaseStations()");
+  await assertUpdateFeedback(false);
+  assert.equal(await evaluate("!!audit.releaseAreas"), true, "area metadata remains independent");
   await evaluate('document.querySelector(".refresh-btn").click()');
   assert.equal(await evaluate("audit.areaRequests"), 2, "pending metadata must be deduplicated");
   await evaluate("audit.releaseAreas()");
@@ -461,7 +565,7 @@ try {
   });
   assert.deepEqual(errors, [], "browser runtime errors");
   console.log(
-    "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, retained map/tiles/view/selection, refresh, location, cancellation, failure recovery, online/offline notifications.",
+    "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, retained map/tiles/view/selection, refresh progress/button feedback, reduced motion, location, cancellation, failure recovery, online/offline notifications.",
   );
 } catch (error) {
   console.error(

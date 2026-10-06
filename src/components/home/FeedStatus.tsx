@@ -19,10 +19,13 @@ export function FeedStatus({ state, errorMessage, onRetry }: Props) {
         </div>
       )}
 
-      {state === "error" && (
+      {errorMessage && (
         <div className="status-strip error" role="alert">
-          <WifiSlash size={16} />
-          <span>{errorMessage}</span>
+          <WifiSlash size={16} className="status-icon" aria-hidden="true" />
+          <span>
+            {errorMessage}
+            {state === "ready" && "；目前顯示上次成功更新的資料。"}
+          </span>
           <button
             type="button"
             className="refresh-btn"

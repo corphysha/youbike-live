@@ -4,11 +4,11 @@ import { ThemeToggle } from "../ThemeToggle";
 interface Props {
   stationCount: number;
   lastFetch: Date | null;
-  isLoading: boolean;
+  isUpdating: boolean;
   onRefresh: () => Promise<void>;
 }
 
-export function PageHeader({ stationCount, lastFetch, isLoading, onRefresh }: Props) {
+export function PageHeader({ stationCount, lastFetch, isUpdating, onRefresh }: Props) {
   return (
     <header className="masthead">
       <div className="masthead-inner">
@@ -32,21 +32,31 @@ export function PageHeader({ stationCount, lastFetch, isLoading, onRefresh }: Pr
             type="button"
             className="refresh-btn"
             onClick={() => void onRefresh()}
-            disabled={isLoading}
-            aria-label="重新整理站點資料"
+            disabled={isUpdating}
+            aria-busy={isUpdating}
+            aria-label={isUpdating ? "更新中，正在重新整理站點資料" : "重新整理站點資料"}
           >
             <ArrowsClockwise
               size={14}
-              className={isLoading ? "spin" : undefined}
+              className={isUpdating ? "spin" : undefined}
               aria-hidden="true"
             />
-            <span className="refresh-label-full">重新整理</span>
+            <span className="refresh-label-full">{isUpdating ? "更新中" : "重新整理"}</span>
             <span className="refresh-label-compact" aria-hidden="true">
-              更新
+              {isUpdating ? "更新中" : "更新"}
             </span>
           </button>
         </div>
       </div>
+      <span className="sr-only" role="status">
+        {isUpdating ? "站點資料更新中" : ""}
+      </span>
+      {isUpdating && (
+        <div className="feed-progress">
+          <progress className="sr-only" aria-label="站點資料更新中" />
+          <span className="feed-progress-indicator" aria-hidden="true" />
+        </div>
+      )}
     </header>
   );
 }
