@@ -99,11 +99,17 @@ function TripLeg({
             <ul>
               {alternatives.map(({ station: alt, distance }) => (
                 <li key={alt.id}>
-                  <span className="trip-alt-name">{alt.name}</span>
-                  <span className="trip-alt-count">
-                    {role === "start" ? bikeShort(alt) : `空位 ${alt.empty}`}
-                  </span>
-                  <span className="muted">{formatDistance(distance)}</span>
+                  <div className="trip-alt-info">
+                    <span className="trip-alt-name" title={alt.name}>
+                      {alt.name}
+                    </span>
+                    <span className="trip-alt-meta">
+                      <span className="trip-alt-count">
+                        {role === "start" ? bikeShort(alt) : `空位 ${alt.empty}`}
+                      </span>
+                      <span className="muted">{formatDistance(distance)}</span>
+                    </span>
+                  </div>
                   <button
                     type="button"
                     className="station-nav-button"

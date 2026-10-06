@@ -1333,10 +1333,24 @@ a {
   min-width: 0;
 }
 
-.trip-alt-name {
+.trip-alt-info {
+  display: grid;
+  gap: 1px;
   min-width: 0;
   flex: 1;
-  overflow-wrap: anywhere;
+}
+
+.trip-alt-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trip-alt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
 }
 
 .trip-alt-count {
