@@ -5,10 +5,17 @@ interface Props {
   stationCount: number;
   lastFetch: Date | null;
   isUpdating: boolean;
+  announceUpdate: boolean;
   onRefresh: () => Promise<void>;
 }
 
-export function PageHeader({ stationCount, lastFetch, isUpdating, onRefresh }: Props) {
+export function PageHeader({
+  stationCount,
+  lastFetch,
+  isUpdating,
+  announceUpdate,
+  onRefresh,
+}: Props) {
   return (
     <header className="masthead">
       <div className="masthead-inner">
@@ -31,30 +38,33 @@ export function PageHeader({ stationCount, lastFetch, isUpdating, onRefresh }: P
           <button
             type="button"
             className="refresh-btn"
-            onClick={() => void onRefresh()}
-            disabled={isUpdating}
-            aria-busy={isUpdating}
-            aria-label={isUpdating ? "更新中，正在重新整理站點資料" : "重新整理站點資料"}
+            onClick={() => {
+              if (!isUpdating) void onRefresh();
+            }}
+            aria-disabled={isUpdating}
+            aria-label="重新整理站點資料"
           >
             <ArrowsClockwise
               size={14}
               className={isUpdating ? "spin" : undefined}
               aria-hidden="true"
             />
-            <span className="refresh-label-full">{isUpdating ? "更新中" : "重新整理"}</span>
-            <span className="refresh-label-compact" aria-hidden="true">
-              {isUpdating ? "更新中" : "更新"}
+            <span className="refresh-label" aria-hidden="true">
+              <span data-hidden={isUpdating || undefined}>
+                <span className="refresh-label-full">重新整理</span>
+                <span className="refresh-label-compact">更新</span>
+              </span>
+              <span data-hidden={!isUpdating || undefined}>更新中</span>
             </span>
           </button>
         </div>
       </div>
       <span className="sr-only" role="status">
-        {isUpdating ? "站點資料更新中" : ""}
+        {announceUpdate ? "站點資料更新中" : ""}
       </span>
       {isUpdating && (
-        <div className="feed-progress">
-          <progress className="sr-only" aria-label="站點資料更新中" />
-          <span className="feed-progress-indicator" aria-hidden="true" />
+        <div className="feed-progress" aria-hidden="true">
+          <span className="feed-progress-indicator" />
         </div>
       )}
     </header>

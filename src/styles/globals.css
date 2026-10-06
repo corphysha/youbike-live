@@ -290,7 +290,7 @@ a {
 }
 
 .theme-toggle:hover,
-.refresh-btn:hover:not(:disabled) {
+.refresh-btn:hover:not([aria-disabled="true"]) {
   border-color: var(--ink-3);
   background: var(--bg-sunken);
 }
@@ -301,19 +301,30 @@ a {
   outline-offset: 2px;
 }
 
-.refresh-btn:disabled {
+.refresh-btn[aria-disabled="true"] {
   cursor: progress;
 }
 
 .masthead .refresh-btn {
-  min-width: 100px;
   flex: none;
   white-space: nowrap;
 }
 
-.masthead .refresh-btn:disabled {
+.masthead .refresh-btn[aria-disabled="true"] {
   background: var(--bg-sunken);
   color: var(--ink-2);
+}
+
+.refresh-label {
+  display: grid;
+}
+
+.refresh-label > span {
+  grid-area: 1 / 1;
+}
+
+.refresh-label > [data-hidden] {
+  visibility: hidden;
 }
 
 .refresh-label-compact {
@@ -857,10 +868,6 @@ a {
 
   .refresh-label-full {
     display: none;
-  }
-
-  .masthead .refresh-btn {
-    min-width: 82px;
   }
 
   .refresh-label-compact {
