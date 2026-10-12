@@ -5,6 +5,27 @@ import { startBrowserAudit } from "./browser-audit.mjs";
 const { cdp, evaluate, targetUrl, close, waitFor, errors, on } = await startBrowserAudit();
 const settleStyles = () =>
   evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+const assertPanelLayout = async () => {
+  await settleStyles();
+  const panels = await evaluate(`(() => {
+    const rect = (selector) => {
+      const box = document.querySelector(selector).getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
+    };
+    return { width: innerWidth, trip: rect('[aria-labelledby="trip-title"]'),
+      alerts: rect('[aria-labelledby="alerts-title"]') };
+  })()`);
+  if (panels.width >= 860) {
+    assert.ok(panels.trip.right < panels.alerts.left, "desktop panels must be side by side");
+    assert.ok(
+      Math.abs(panels.trip.top - panels.alerts.top) < 1 &&
+        Math.abs(panels.trip.bottom - panels.alerts.bottom) < 1,
+      `desktop panels must have matching top and bottom edges: ${JSON.stringify(panels)}`,
+    );
+  } else {
+    assert.ok(panels.alerts.top > panels.trip.bottom, "mobile panels must stack without overlap");
+  }
+};
 const assertUpdateFeedback = async (
   updating,
   expectedMessage = updating ? "站點資料更新中" : "站點資料已更新",
@@ -233,6 +254,16 @@ try {
     "nearest ten cards before area response",
   );
   await assertUpdateFeedback(false);
+  // Panels share the desktop row height, but keep separate rows on small screens.
+  for (const width of [320, 390, 859, 860, 1024, 1440]) {
+    await cdp("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: width < 768,
+    });
+    await assertPanelLayout();
+  }
   // Foreground and background updates preserve focus and size, including enlarged fallback text.
   for (const [width, fontSize] of [
     [320, 18],
@@ -401,6 +432,7 @@ try {
   await waitFor(
     'document.querySelector(".trip-leg h3")?.textContent === document.querySelector(".selected-station h3")?.textContent',
   );
+  await assertPanelLayout();
   assert.equal(
     await evaluate(
       'document.querySelector(".selected-station .trip-btn").getAttribute("aria-pressed")',
@@ -843,7 +875,7 @@ try {
   });
   assert.deepEqual(errors, [], "browser runtime errors");
   console.log(
-    "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, OpenStreetMap tile identification, retained map/tiles/view/selection, refresh progress/button feedback, reduced motion, location, cancellation, failure recovery, online/offline notifications.",
+    "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, responsive panel alignment, lazy map, OpenStreetMap tile identification, retained map/tiles/view/selection, refresh progress/button feedback, reduced motion, location, cancellation, failure recovery, online/offline notifications.",
   );
 } catch (error) {
   console.error(
