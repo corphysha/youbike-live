@@ -71,6 +71,13 @@ try {
   // Deterministic feeds: delayed area names, controllable errors/updates, 10,000 stations.
   await cdp("Page.addScriptToEvaluateOnNewDocument", {
     source: `
+    document.addEventListener("DOMContentLoaded", () => {
+      // Reproduce the deployed page's restrictive cross-origin referrer policy.
+      const meta = document.createElement("meta");
+      meta.name = "referrer";
+      meta.content = "same-origin";
+      document.head.appendChild(meta);
+    }, { once: true });
     window.audit = { stationRequests: 0, areaRequests: 0, fail: false, available: 3,
       lat: 25.0478, lng: 121.5319, denied: false, held: false };
     if (location.search.includes("held")) audit.held = true;
@@ -171,6 +178,7 @@ try {
   });
   // Local tile fixtures make request counts independent of the external tile service.
   let tileRequests = 0;
+  const tileRequestDetails = [];
   let notificationChunkRequests = 0;
   await cdp("Fetch.enable", {
     patterns: [
@@ -187,6 +195,12 @@ try {
       return;
     }
     tileRequests++;
+    tileRequestDetails.push({
+      url: request.url,
+      headers: Object.fromEntries(
+        Object.entries(request.headers).map(([name, value]) => [name.toLowerCase(), value]),
+      ),
+    });
     await cdp("Fetch.fulfillRequest", {
       requestId,
       responseCode: 200,
@@ -305,6 +319,22 @@ try {
   );
   await evaluate('document.querySelector("#map-body").scrollIntoView()');
   await waitFor("audit.mapCreates === 1 && document.querySelector('.user-location-dot')");
+  await waitFor('document.querySelector(".leaflet-tile-loaded")');
+  assert.ok(tileRequestDetails.length > 0, "visible map must request tiles");
+  for (const request of tileRequestDetails) {
+    assert.equal(
+      request.headers.referer,
+      `${new URL(targetUrl).origin}/`,
+      "OpenStreetMap tiles must identify the site even with a same-origin document policy",
+    );
+    assert.equal(new URL(request.url).origin, "https://tile.openstreetmap.org");
+  }
+  assert.ok(
+    await evaluate(
+      `Array.from(document.querySelectorAll(".leaflet-tile")).every(tile => tile.referrerPolicy === "strict-origin-when-cross-origin")`,
+    ),
+    "tile images must explicitly send only the origin for cross-site requests",
+  );
   assert.equal(
     await evaluate('getComputedStyle(document.querySelector(".leaflet-map-pane")).position'),
     "absolute",
@@ -813,7 +843,7 @@ try {
   });
   assert.deepEqual(errors, [], "browser runtime errors");
   console.log(
-    "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, retained map/tiles/view/selection, refresh progress/button feedback, reduced motion, location, cancellation, failure recovery, online/offline notifications.",
+    "Loading audit passed: 10,000 stations, nonblocking areas, nearby pagination, lazy map, OpenStreetMap tile identification, retained map/tiles/view/selection, refresh progress/button feedback, reduced motion, location, cancellation, failure recovery, online/offline notifications.",
   );
 } catch (error) {
   console.error(
