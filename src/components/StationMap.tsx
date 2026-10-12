@@ -79,8 +79,10 @@ export function StationMap({ active, stations, selectedId, userLocation, onSelec
         });
         leaflet.control.zoom({ zoomInTitle: "放大地圖", zoomOutTitle: "縮小地圖" }).addTo(map);
         leaflet
-          .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
             maxZoom: 19,
+            // OSM requires a Referer even when the page's policy is same-origin.
+            referrerPolicy: "strict-origin-when-cross-origin",
             attribution:
               '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           })

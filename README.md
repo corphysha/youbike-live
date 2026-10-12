@@ -87,6 +87,17 @@ bun run audit:responsive  # 320–1024px 排版、主題、定位、站點選取
 `audit:responsive` 預設使用即時資料；也可設定 `STATION_FEED_PATH` 為下載的官方 JSON，
 以同一份資料重現檢查結果。
 
+### OpenStreetMap 圖磚政策
+
+底圖使用官方要求的 `https://tile.openstreetmap.org/{z}/{x}/{y}.png`，保留可見的版權標示與瀏覽器快取。
+每個圖磚明確設定 `referrerPolicy: "strict-origin-when-cross-origin"`，即使部署端回傳
+`Referrer-Policy: same-origin`，跨來源圖磚請求仍會傳送本站來源，不包含頁面路徑或查詢參數。
+`audit:loading` 會模擬此限制，檢查實際圖磚請求的 `Referer` 與官方主機名稱。
+
+若特定桌面瀏覽器仍顯示「Access blocked」，檢查圖磚回應的 `x-blocked` 標頭：封鎖圖片也可能回傳 HTTP 200。
+隱私擴充套件或防追蹤軟體若在送出前移除 `Referer`，需由使用者允許 `tile.openstreetmap.org` 的來源標頭；
+請勿改用代理、偽造識別資訊或停用快取來規避封鎖。政策：<https://operations.osmfoundation.org/policies/tiles/>。
+
 ## 效能量測與預算
 
 - 使用 module Web Worker 解析及驗證兩個 feed，讓大型 JSON 與 Zod 不阻塞 UI。
